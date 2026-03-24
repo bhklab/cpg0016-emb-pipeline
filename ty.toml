@@ -1,0 +1,5 @@
+[[overrides]]
+include = ["Snakefile", "workflow/**/*.py"]
+
+[overrides.rules]
+unresolved-reference = "ignore"

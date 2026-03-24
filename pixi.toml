@@ -1,0 +1,27 @@
+[workspace]
+authors = ["Michael Tran <michaelcao-anh.tran@uhn.ca>"]
+channels = ["conda-forge", "bioconda"]
+name = "cpg0016-emb-pipeline"
+platforms = ["osx-arm64", "linux-64"]
+version = "0.1.0"
+
+[tasks]
+download-metadata = "python workflow/scripts/download_metadata.py"
+
+[dependencies]
+ruff = ">=0.15.5,<0.16"
+python = ">=3.14.3,<3.15"
+duckdb = ">=1.5.0,<2"
+r-base = ">=4.5,<4.6"
+r-arrow = "*"
+r-yaml = "*"
+bioconductor-multiassayexperiment = "*"
+bioconductor-summarizedexperiment = "*"
+bioconductor-s4vectors = "*"
+ty = ">=0.0.24,<0.0.25"
+
+[pypi-dependencies]
+snakemake = ">=9.17.1, <10"
+polars = ">=1.39.0, <2"
+awscli = ">=1.42.8, <2"
+air-formatter = "*"

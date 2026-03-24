@@ -1,0 +1,164 @@
+from csv import DictReader
+from functools import lru_cache
+
+configfile: "config/pipeline.yaml"
+
+RAW_DIR = config["paths"]["raw_dir"].rstrip("/")
+PROC_DIR = config["paths"]["proc_dir"].rstrip("/")
+METADATA_DIR = config["paths"]["metadata_dir"].rstrip("/")
+REFERENCE_DIR = f"{METADATA_DIR}/reference"
+PROFILE_MODEL = config["dataset"]["profile_model"].rstrip("/")
+MODEL_OUTPUT_STEMS = {
+    "cpcnn_zenodo_7114558": "cpcnn",
+    "efficientnet_v2_imagenet21k_s_feature_vector_2_0260bc96": "efficientnet",
+}
+MODEL_STEM = MODEL_OUTPUT_STEMS.get(PROFILE_MODEL, PROFILE_MODEL.replace("/", "_"))
+
+MANIFEST_TSV = f"{METADATA_DIR}/{MODEL_STEM}_profile_manifest.tsv"
+SUMMARY_TSV = f"{METADATA_DIR}/{MODEL_STEM}_profile_manifest_summary.tsv"
+COMPOUND_MASTER = f"{METADATA_DIR}/compound_master.tsv"
+COMPOUND_METADATA = f"{METADATA_DIR}/compound_metadata.tsv"
+WELL_PROFILES = f"{PROC_DIR}/cpg0016_{MODEL_STEM}_well_profiles.parquet"
+MAE_RDS = f"{PROC_DIR}/cpg0016_{MODEL_STEM}_mae.rds"
+
+REFERENCE_METADATA = {
+    "well_metadata": f"{REFERENCE_DIR}/well.csv.gz",
+    "plate_metadata": f"{REFERENCE_DIR}/plate.csv.gz",
+    "compound_metadata": f"{REFERENCE_DIR}/compound.csv.gz",
+    "control_metadata": f"{REFERENCE_DIR}/perturbation_control.csv",
+    "compound_source_metadata": f"{REFERENCE_DIR}/compound_source.csv.gz",
+}
+
+
+checkpoint build_profile_manifest:
+    input:
+        plate_metadata=REFERENCE_METADATA["plate_metadata"],
+    output:
+        manifest_tsv=MANIFEST_TSV,
+        summary_tsv=SUMMARY_TSV,
+    script:
+        "scripts/build_manifest.py"
+
+
+rule download_reference_metadata:
+    output:
+        **REFERENCE_METADATA,
+    script:
+        "scripts/download_metadata.py"
+
+
+@lru_cache(maxsize=1)
+def manifest_rows():
+    manifest_path = checkpoints.build_profile_manifest.get().output.manifest_tsv
+
+    with open(manifest_path, newline="", encoding="utf-8") as handle:
+        rows = list(DictReader(handle, delimiter="\t"))
+
+    if not rows:
+        raise ValueError(
+            "Profile manifest is empty. Adjust selection.sources or plate_limit_per_source."
+        )
+
+    return rows
+
+
+@lru_cache(maxsize=1)
+def manifest_lookup():
+    lookup: dict[str, dict[str, str]] = {}
+    for row in manifest_rows():
+        lookup[row["local_relpath"]] = row
+    return lookup
+
+
+def raw_profile_targets(_wildcards):
+    return [f"{RAW_DIR}/{row['local_relpath']}" for row in manifest_rows()]
+
+
+def s3_uri_for_target(wildcards):
+    return f"s3://{wildcards.local_relpath}"
+
+
+def expected_size_for_target(wildcards):
+    row = manifest_lookup()[wildcards.local_relpath]
+    return int(row["size_bytes"])
+
+
+rule download_profile:
+    input:
+        manifest_tsv=lambda _wildcards: checkpoints.build_profile_manifest.get().output.manifest_tsv,
+    output:
+        f"{RAW_DIR}/{{local_relpath}}",
+    params:
+        s3_uri=s3_uri_for_target,
+        expected_size=expected_size_for_target,
+        overwrite=lambda wildcards: bool(config["download"].get("overwrite", False)),
+    script:
+        "scripts/download_profile.py"
+
+
+rule build_processed_tables:
+    input:
+        manifest_tsv=lambda _wildcards: checkpoints.build_profile_manifest.get().output.manifest_tsv,
+        summary_tsv=lambda _wildcards: checkpoints.build_profile_manifest.get().output.summary_tsv,
+        raw_profiles=raw_profile_targets,
+        **REFERENCE_METADATA,
+    output:
+        well_profiles=WELL_PROFILES,
+        compound_master=COMPOUND_MASTER,
+    script:
+        "scripts/process_profiles.py"
+
+
+rule build_compound_metadata:
+    input:
+        compound_master=COMPOUND_MASTER,
+    output:
+        compound_metadata=COMPOUND_METADATA,
+    script:
+        "scripts/build_compound_metadata.py"
+
+
+rule build_multiassayexperiment:
+    input:
+        well_profiles=WELL_PROFILES,
+        compound_metadata=COMPOUND_METADATA,
+        manifest_tsv=lambda _wildcards: checkpoints.build_profile_manifest.get().output.manifest_tsv,
+        summary_tsv=lambda _wildcards: checkpoints.build_profile_manifest.get().output.summary_tsv,
+        raw_profiles=raw_profile_targets,
+        configfile="config/pipeline.yaml",
+    output:
+        mae_rds=MAE_RDS,
+    params:
+        profile_model=PROFILE_MODEL,
+        model_stem=MODEL_STEM,
+    script:
+        "scripts/build_mae.R"
+
+
+rule download:
+    input:
+        manifest_tsv=lambda _wildcards: checkpoints.build_profile_manifest.get().output.manifest_tsv,
+        summary_tsv=lambda _wildcards: checkpoints.build_profile_manifest.get().output.summary_tsv,
+        raw_profiles=raw_profile_targets,
+        reference_metadata=list(REFERENCE_METADATA.values()),
+
+
+rule process:
+    input:
+        MAE_RDS,
+        COMPOUND_MASTER,
+        COMPOUND_METADATA,
+
+
+rule mae:
+    input:
+        MAE_RDS,
+
+
+rule all:
+    default_target: True
+    input:
+        MAE_RDS,
+        COMPOUND_MASTER,
+        COMPOUND_METADATA,
+        SUMMARY_TSV,

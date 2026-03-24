@@ -1,0 +1,47 @@
+paths:
+  raw_dir: data/rawdata
+  proc_dir: data/procdata
+  metadata_dir: data/metadata
+
+dataset:
+  bucket: cellpainting-gallery
+  prefix: cpg0016-jump
+  # options: cpcnn_zenodo_7114558, efficientnet_v2_imagenet21k_s_feature_vector_2_0260bc96
+  profile_model: cpcnn_zenodo_7114558
+
+selection:
+  # Curated drug-only subset.
+  mode: source_subset
+
+  # source_4 is ORF-heavy and source_13 is CRISPR-heavy, so they are excluded
+  # from the default drug-only subset.
+  # source_15 does not include published workspace_dl profile outputs.
+  # The efficientnet model is also missing 4 COMPOUND plates that exist for CPCNN:
+  # 1 in source_6 and 3 in source_11.
+  sources:
+    - source_1
+    - source_2
+    - source_3
+    - source_5
+    - source_6
+    - source_7
+    - source_8
+    - source_9
+    - source_10
+    - source_11
+  # Keep only the main compound-screening plates. This excludes TARGET1/TARGET2
+  # benchmark panels plus ORF/CRISPR/control-only plate classes.
+  include_plate_types:
+    - COMPOUND
+  # Set to null to include every plate from the selected sources.
+  plate_limit_per_source: null
+  # Keep all small-molecule wells in one table, including DMSO and positive controls.
+  # Downstream modeling should keep treatment wells with Metadata_pert_type: treatment
+  # and drop controls with other Metadata_pert_type values.
+  output_row_filter: all_compound_wells
+
+download:
+  overwrite: true
+
+metadata:
+  base_url: https://raw.githubusercontent.com/jump-cellpainting/datasets/main/metadata
