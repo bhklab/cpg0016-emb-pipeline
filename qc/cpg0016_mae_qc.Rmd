@@ -1,0 +1,352 @@
+---
+title: "Cell Painting cpg0016-jump Embedding MAE"
+author: "Michael Tran"
+date: "`r format(Sys.Date(), '%Y-%m-%d')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+---
+
+This notebook demonstrates the structure and basic use of a `MultiAssayExperiment`
+containing well-level Cell Painting embeddings and compound annotations.
+
+## Setup
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 8,
+  fig.height = 5
+)
+
+suppressPackageStartupMessages({
+  library(MultiAssayExperiment)
+  library(SummarizedExperiment)
+  library(dplyr)
+  library(tibble)
+  library(ggplot2)
+  library(knitr)
+  library(scales)
+})
+
+theme_set(theme_minimal(base_size = 12))
+
+project_root <- normalizePath(
+  if (dir.exists("data/procdata")) "." else "..",
+  winslash = "/",
+  mustWork = TRUE
+)
+knitr::opts_knit$set(root.dir = project_root)
+
+mae_path <- file.path(project_root, "data", "procdata", "cpg0016_cpcnn_mae.rds")
+
+if (!file.exists(mae_path)) {
+  stop(
+    "MAE file not found: ", mae_path
+  )
+}
+```
+
+## Load the MAE
+
+```{r load-data}
+mae <- readRDS(mae_path)
+embedding_se <- experiments(mae)[["all_emb"]]
+embedding_mat <- assay(embedding_se, "embedding")
+
+well_metadata <- as.data.frame(colData(mae)) |>
+  rownames_to_column("sample_id") |>
+  as_tibble()
+
+compound_metadata <- as.data.frame(metadata(mae)$compound_metadata) |>
+  as_tibble()
+
+mae
+```
+
+## Dataset Overview
+
+```{r dataset-overview}
+perturbation_counts <- well_metadata |>
+  count(Metadata_pert_type, name = "wells", sort = TRUE)
+
+overview_tbl <- tibble(
+  quantity = c(
+    "Experiments",
+    "Assay name",
+    "Embedding dimensions",
+    "Wells",
+    "Plates",
+    "Sources",
+    "Unique compounds",
+    "Treatment wells",
+    "Negative-control wells",
+    "Positive-control wells"
+  ),
+  value = c(
+    length(experiments(mae)),
+    paste(assayNames(embedding_se), collapse = ", "),
+    scales::comma(nrow(embedding_mat)),
+    scales::comma(ncol(embedding_mat)),
+    scales::comma(n_distinct(well_metadata$Metadata_Plate)),
+    scales::comma(n_distinct(well_metadata$Metadata_Source)),
+    scales::comma(n_distinct(well_metadata$Metadata_JCP2022)),
+    scales::comma(sum(well_metadata$Metadata_pert_type == "treatment")),
+    scales::comma(sum(well_metadata$Metadata_pert_type == "negcon")),
+    scales::comma(sum(well_metadata$Metadata_pert_type == "poscon"))
+  )
+)
+
+kable(overview_tbl)
+```
+
+This file contains `r scales::comma(ncol(embedding_mat))` wells as columns of a single embedding assay named `embedding`. Each well has a `r scales::comma(nrow(embedding_mat))`-dimensional feature vector and a matching row in `colData(mae)`.
+
+## Inspect the MAE Structure
+
+The object layout is inspected directly below. The experiment container, assay
+name, well-level metadata, and object-level metadata can all be accessed from
+the printed structure and the code shown in this section.
+
+```{r object-contents}
+mae
+
+experiments(mae)
+
+colnames(colData(mae))
+
+names(metadata(mae))
+```
+
+## Well-Level Metadata
+
+```{r well-metadata-head}
+kable(head(well_metadata, 8))
+```
+
+The main fields commonly used in downstream analysis are:
+
+* `sample_id`: the well identifier used throughout the object. It is the row name of `colData(mae)` and the column name of the embedding matrix.
+* `Metadata_Source`: the source-specific study label.
+* `Metadata_Batch`: the batch identifier within a source.
+* `Metadata_Plate` and `Metadata_Well`: the physical plate and well coordinates.
+* `Metadata_JCP2022`: the perturbagen identifier used to join to compound metadata.
+* `Metadata_InChIKey`: the structure-level identifier for the perturbagen.
+* `Metadata_pert_type`: whether the well is a treatment, negative control (`negcon`), or positive control (`poscon`).
+
+```{r perturbation-summary}
+kable(perturbation_counts)
+```
+
+```{r perturbation-barplot, fig.height=4}
+ggplot(
+  perturbation_counts,
+  aes(
+    x = reorder(Metadata_pert_type, wells),
+    y = wells,
+    fill = Metadata_pert_type
+  )
+) +
+  geom_col(show.legend = FALSE) +
+  labs(
+    title = "Well counts by perturbation type",
+    x = "Perturbation type",
+    y = "Number of wells"
+  ) +
+  coord_flip()
+```
+
+## Inspect the Embedding Assay
+
+```{r rowdata-head}
+kable(head(as.data.frame(rowData(embedding_se)), 3))
+```
+
+```{r rowdata-dimensions}
+dim(rowData(embedding_se))
+```
+
+`all_emb` is a `SummarizedExperiment` with one assay called `embedding`. Rows are embedding features and columns are wells.
+
+```{r embedding-dimensions}
+tibble(
+  metric = c("Embedding features per well", "Wells in assay"),
+  value = c(nrow(embedding_mat), ncol(embedding_mat))
+) |>
+  kable()
+```
+
+```{r matrix-slice}
+embedding_mat[1:6, 1:4]
+```
+
+The matrix and metadata are aligned by `sample_id`.
+
+```{r alignment-check}
+identical(colnames(embedding_mat), well_metadata$sample_id)
+```
+
+## Compound Metadata
+
+```{r compound-metadata-head}
+compound_preview <- compound_metadata |>
+  select(
+    Metadata_JCP2022,
+    Metadata_InChIKey,
+    Metadata_pert_type,
+    Metadata_Display_Name,
+    AnnotationDB_CID,
+    AnnotationDB_Has_Match
+  ) |>
+  slice_head(n = 8)
+
+kable(compound_preview)
+```
+
+This table is stored once at the object level instead of being repeated on
+every well. The join key is `Metadata_JCP2022`.
+
+The `Metadata_pert_type` labels also appear in the compound metadata. In this
+context, `negcon` denotes negative controls and `poscon` denotes positive
+controls.
+
+```{r control-compound-examples}
+negcon_examples <- compound_metadata |>
+  filter(Metadata_pert_type == "negcon") |>
+  select(
+    Metadata_JCP2022,
+    Metadata_Control_Name,
+    Metadata_Display_Name,
+    AnnotationDB_CID
+  ) |>
+  slice_head(n = 3)
+
+poscon_examples <- compound_metadata |>
+  filter(Metadata_pert_type == "poscon") |>
+  select(
+    Metadata_JCP2022,
+    Metadata_Control_Name,
+    Metadata_Display_Name,
+    AnnotationDB_CID
+  ) |>
+  slice_head(n = 3)
+
+kable(negcon_examples, caption = "Example negative-control compounds")
+
+kable(poscon_examples, caption = "Example positive-control compounds")
+```
+
+## Demonstrate Basic Access Patterns
+
+### Pull One Plate and Its Embeddings
+
+```{r plate-subset}
+plate_id <- well_metadata$Metadata_Plate[1]
+
+plate_wells <- well_metadata |>
+  filter(Metadata_Plate == plate_id)
+
+plate_embeddings <- embedding_mat[, plate_wells$sample_id, drop = FALSE]
+
+kable(
+  plate_wells |>
+    select(
+      sample_id,
+      Metadata_Well,
+      Metadata_JCP2022,
+      Metadata_pert_type
+    ) |>
+    slice_head(n = 8)
+)
+
+dim(plate_embeddings)
+```
+
+### Annotate Wells with Compound Metadata
+
+```{r plate-annotations}
+plate_treatment_wells <- plate_wells |>
+  filter(Metadata_pert_type == "treatment")
+
+plate_treatment_annotated <- plate_treatment_wells |>
+  select(
+    sample_id,
+    Metadata_Source,
+    Metadata_Plate,
+    Metadata_Well,
+    Metadata_JCP2022
+  ) |>
+  left_join(
+    compound_metadata |>
+      select(
+        Metadata_JCP2022,
+        Metadata_Display_Name,
+        AnnotationDB_Name,
+        AnnotationDB_Has_Match
+      ),
+    by = "Metadata_JCP2022"
+  )
+
+kable(slice_head(plate_treatment_annotated, n = 8))
+```
+
+The same join pattern works for any well subset:
+
+```{r full-treatment-pattern, eval=FALSE}
+treatment_wells <- well_metadata |>
+  filter(Metadata_pert_type == "treatment")
+
+treatment_embeddings <- embedding_mat[, treatment_wells$sample_id, drop = FALSE]
+
+treatment_annotations <- treatment_wells |>
+  left_join(
+    compound_metadata,
+    by = "Metadata_JCP2022"
+  )
+```
+
+### Extract Embeddings for a Small Well Set
+
+```{r small-well-set}
+example_wells <- plate_treatment_wells$sample_id[1:4]
+
+embedding_mat[1:10, example_wells, drop = FALSE]
+```
+
+This gives a small feature-by-well slice. For modeling or distance
+calculations, the wells are typically subset first and the result is then kept
+as a matrix.
+
+### Build One Mean Profile Per Compound
+
+```{r compound-mean-pattern, eval=FALSE}
+treatment_wells <- well_metadata |>
+  filter(Metadata_pert_type == "treatment")
+
+treatment_embeddings <- embedding_mat[, treatment_wells$sample_id, drop = FALSE]
+
+compound_means <- rowsum(
+  x = t(treatment_embeddings),
+  group = treatment_wells$Metadata_JCP2022,
+  reorder = FALSE
+)
+
+compound_counts <- table(treatment_wells$Metadata_JCP2022)
+
+compound_means <- compound_means /
+  as.numeric(compound_counts[rownames(compound_means)])
+
+dim(compound_means)
+```
+
+After this step, `compound_means` has one row per compound and one column per
+embedding feature.
+
+## Session Info
+
+```{r session-info}
+sessionInfo()
+```
