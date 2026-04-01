@@ -45,3 +45,4 @@ download:
 
 metadata:
   base_url: https://raw.githubusercontent.com/jump-cellpainting/datasets/main/metadata
+  annotationdb_url: https://v2annotationdb.bhklab.ca/compound/all

@@ -6,7 +6,7 @@ from urllib.request import Request, urlopen
 import polars as pl
 
 
-ANNOTATIONDB_URL = "https://annotationdb.bhklab.ca/compound/all"
+DEFAULT_ANNOTATIONDB_URL = "https://v2annotationdb.bhklab.ca/compound/all"
 ANNOTATIONDB_TIMEOUT_SECONDS = 300.0
 ANNOTATIONDB_RETRIES = 5
 ANNOTATIONDB_BACKOFF_SECONDS = 5.0
@@ -33,7 +33,7 @@ OUTPUT_COLUMNS = [
     "AnnotationDB_CID",
     "AnnotationDB_Name",
     "AnnotationDB_SMILES",
-    "AnnotationDB_Has_Match",
+    "In_AnnotationDB",
 ]
 
 
@@ -107,11 +107,16 @@ if duplicate_jcp.height > 0:
         "cannot build a JCP-keyed compound metadata table"
     )
 
+annotationdb_url = snakemake.config.get("metadata", {}).get(
+    "annotationdb_url",
+    DEFAULT_ANNOTATIONDB_URL,
+)
+
 print(
-    f"[build_compound_metadata] reading AnnotationDB bulk compound index from {ANNOTATIONDB_URL}",
+    f"[build_compound_metadata] reading AnnotationDB bulk compound index from {annotationdb_url}",
     flush=True,
 )
-annotationdb_payload = fetch_annotationdb_all(ANNOTATIONDB_URL)
+annotationdb_payload = fetch_annotationdb_all(annotationdb_url)
 annotationdb = (
     pl.DataFrame(annotationdb_payload)
     .rename(
@@ -151,7 +156,7 @@ compound_metadata = (
             pl.coalesce([normalized_control_name, pl.col("AnnotationDB_Name")]).alias(
                 "Metadata_Display_Name"
             ),
-            pl.col("AnnotationDB_CID").is_not_null().alias("AnnotationDB_Has_Match"),
+            pl.col("AnnotationDB_CID").is_not_null().alias("In_AnnotationDB"),
         ]
     )
     .select(OUTPUT_COLUMNS)
@@ -168,7 +173,7 @@ compound_metadata.write_csv(
 match_counts = compound_metadata.select(
     [
         pl.len().alias("compound_rows"),
-        pl.col("AnnotationDB_Has_Match").sum().alias("annotationdb_matches"),
+        pl.col("In_AnnotationDB").sum().alias("annotationdb_matches"),
     ]
 ).row(0, named=True)
 print(

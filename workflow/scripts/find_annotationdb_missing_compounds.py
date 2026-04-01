@@ -7,7 +7,7 @@ from urllib.request import Request, urlopen
 
 DEFAULT_INPUT = Path("data/metadata/compound_master.tsv")
 DEFAULT_OUTPUT = Path("data/metadata/missing_annotationdb.txt")
-DEFAULT_ANNOTATIONDB_URL = "https://annotationdb.bhklab.ca/compound/all"
+DEFAULT_ANNOTATIONDB_URL = "https://v2annotationdb.bhklab.ca/compound/all"
 INCHIKEY_COLUMN = "Metadata_InChIKey"
 
 
