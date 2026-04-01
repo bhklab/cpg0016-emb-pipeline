@@ -13,7 +13,7 @@
 
 <meta name="date" content="2026-03-31" />
 
-<title>Exploring the CPG0016 Cell Painting Embedding MAE</title>
+<title>JUMP Cell Painting cpg0016 CPCNN Embedding MAE v1.1</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -350,8 +350,8 @@ display: none;
 
 
 
-<h1 class="title toc-ignore">Exploring the CPG0016 Cell Painting
-Embedding MAE</h1>
+<h1 class="title toc-ignore">JUMP Cell Painting cpg0016 CPCNN Embedding
+MAE v1.1</h1>
 <h4 class="author">Michael Tran</h4>
 <h4 class="date">2026-03-31</h4>
 
@@ -385,7 +385,8 @@ Compound</a></li>
 </ul>
 </div>
 
-<p>This notebook demonstrates the structure and basic use of a
+<p>This notebook demonstrates the structure and basic use of JUMP Cell
+Painting cpg0016 CPCNN Embedding MAE v1.1, a
 <code>MultiAssayExperiment</code> containing well-level Cell Painting
 embeddings and compound annotations.</p>
 <div id="setup" class="section level2">
@@ -396,6 +397,9 @@ embeddings and compound annotations.</p>
 <pre class="r"><code>mae &lt;- readRDS(mae_path)
 embedding_se &lt;- experiments(mae)[[&quot;all_emb&quot;]]
 embedding_mat &lt;- assay(embedding_se, &quot;embedding&quot;)
+dataset_name &lt;- metadata(mae)$dataset_name
+dataset_version &lt;- metadata(mae)$dataset_version
+dataset_label &lt;- paste(dataset_name, dataset_version)
 
 well_metadata &lt;- as.data.frame(colData(mae)) |&gt;
   rownames_to_column(&quot;sample_id&quot;) |&gt;
@@ -501,16 +505,17 @@ kable(overview_tbl)</code></pre>
 </tr>
 </tbody>
 </table>
-<p>This file contains 793,683 wells as columns of a single embedding
-assay named <code>embedding</code>. Each well has a 672-dimensional
-feature vector and a matching row in <code>colData(mae)</code>.</p>
+<p>JUMP Cell Painting cpg0016 CPCNN Embedding MAE v1.1 contains 793,683
+wells as columns of a single embedding assay named
+<code>embedding</code>. Each well has a 672-dimensional feature vector
+and a matching row in <code>colData(mae)</code>.</p>
 </div>
 <div id="inspect-the-mae-structure" class="section level2">
 <h2>Inspect the MAE Structure</h2>
 <p>The object layout is inspected directly below. The experiment
-container, assay name, well-level metadata, and object-level metadata
-can all be accessed from the printed structure and the code shown in
-this section.</p>
+container, assay name, dataset label, well-level metadata, and
+object-level metadata can all be accessed from the printed structure and
+the code shown in this section.</p>
 <pre class="r"><code>mae</code></pre>
 <pre><code>## A MultiAssayExperiment object of 1 listed
 ##  experiment with a user-defined name and respective class.
@@ -527,24 +532,34 @@ this section.</p>
 <pre class="r"><code>experiments(mae)</code></pre>
 <pre><code>## ExperimentList class object of length 1:
 ##  [1] all_emb: SummarizedExperiment with 672 rows and 793683 columns</code></pre>
+<pre class="r"><code>metadata(mae)[c(&quot;dataset_name&quot;, &quot;dataset_version&quot;, &quot;compound_metadata_key&quot;)]</code></pre>
+<pre><code>## $dataset_name
+## [1] &quot;JUMP Cell Painting cpg0016 CPCNN Embedding MAE&quot;
+## 
+## $dataset_version
+## [1] &quot;v1.1&quot;
+## 
+## $compound_metadata_key
+## [1] &quot;JUMP.CP.ID&quot;</code></pre>
 <pre class="r"><code>colnames(colData(mae))</code></pre>
 <pre><code>## [1] &quot;Metadata_Source&quot;    &quot;Metadata_Batch&quot;     &quot;Metadata_Plate&quot;    
 ## [4] &quot;Metadata_Well&quot;      &quot;Metadata_JCP2022&quot;   &quot;Metadata_InChIKey&quot; 
 ## [7] &quot;Metadata_pert_type&quot;</code></pre>
 <pre class="r"><code>names(metadata(mae))</code></pre>
-<pre><code>## [1] &quot;profile_model&quot;         &quot;model_stem&quot;            &quot;embedding_columns&quot;    
-## [4] &quot;embedding_lengths&quot;     &quot;pipeline_config&quot;       &quot;manifest&quot;             
-## [7] &quot;manifest_summary&quot;      &quot;compound_metadata_key&quot; &quot;compound_metadata&quot;</code></pre>
+<pre><code>##  [1] &quot;dataset_name&quot;          &quot;dataset_version&quot;       &quot;profile_model&quot;        
+##  [4] &quot;model_stem&quot;            &quot;embedding_columns&quot;     &quot;embedding_lengths&quot;    
+##  [7] &quot;pipeline_config&quot;       &quot;manifest&quot;              &quot;manifest_summary&quot;     
+## [10] &quot;compound_metadata_key&quot; &quot;compound_metadata&quot;</code></pre>
 </div>
 <div id="well-level-metadata" class="section level2">
 <h2>Well-Level Metadata</h2>
 <pre class="r"><code>kable(head(well_metadata, 8))</code></pre>
-<table>
+<table style="width:100%;">
 <colgroup>
+<col width="13%" />
 <col width="9%" />
-<col width="9%" />
-<col width="23%" />
-<col width="9%" />
+<col width="16%" />
+<col width="11%" />
 <col width="8%" />
 <col width="10%" />
 <col width="17%" />
@@ -564,83 +579,83 @@ this section.</p>
 </thead>
 <tbody>
 <tr class="odd">
-<td align="left">EC000129.N14</td>
-<td align="left">source_11</td>
-<td align="left">Batch4</td>
-<td align="left">EC000129</td>
-<td align="left">N14</td>
-<td align="left">JCP2022_027967</td>
-<td align="left">GVBDFXYXIJZSNJ-UHFFFAOYSA-N</td>
+<td align="left">CP4-SC1-17.A13</td>
+<td align="left">source_7</td>
+<td align="left">20210731_Run4</td>
+<td align="left">CP4-SC1-17</td>
+<td align="left">A13</td>
+<td align="left">JCP2022_041519</td>
+<td align="left">JQSRUVXPODZKAF-UHFFFAOYSA-N</td>
 <td align="left">treatment</td>
 </tr>
 <tr class="even">
-<td align="left">EC000143.J04</td>
-<td align="left">source_11</td>
-<td align="left">Batch3</td>
-<td align="left">EC000143</td>
-<td align="left">J04</td>
-<td align="left">JCP2022_060899</td>
-<td align="left">NROOQYHYZXQROZ-UHFFFAOYSA-N</td>
+<td align="left">CP1-SC1-21.E05</td>
+<td align="left">source_7</td>
+<td align="left">20210719_Run1</td>
+<td align="left">CP1-SC1-21</td>
+<td align="left">E05</td>
+<td align="left">JCP2022_059635</td>
+<td align="left">NKOTUQPBTKXMQO-UHFFFAOYSA-N</td>
 <td align="left">treatment</td>
 </tr>
 <tr class="odd">
-<td align="left">GR00003393.I27</td>
+<td align="left">GR00004412.A27</td>
 <td align="left">source_9</td>
-<td align="left">20210825_Run6</td>
-<td align="left">GR00003393</td>
-<td align="left">I27</td>
-<td align="left">JCP2022_022101</td>
-<td align="left">FPGWKGZROMEOGG-UHFFFAOYSA-N</td>
+<td align="left">20211103-Run16</td>
+<td align="left">GR00004412</td>
+<td align="left">A27</td>
+<td align="left">JCP2022_006246</td>
+<td align="left">BGTNTJYDLGJMHV-UHFFFAOYSA-N</td>
 <td align="left">treatment</td>
 </tr>
 <tr class="even">
-<td align="left">APTJUM409.G14</td>
-<td align="left">source_5</td>
-<td align="left">JUMPCPE-20210903-Run27_20210904_215148</td>
-<td align="left">APTJUM409</td>
-<td align="left">G14</td>
-<td align="left">JCP2022_034085</td>
-<td align="left">IBWCNIONDJCWAD-UHFFFAOYSA-N</td>
+<td align="left">UL001769.P34</td>
+<td align="left">source_1</td>
+<td align="left">Batch4_20221012</td>
+<td align="left">UL001769</td>
+<td align="left">P34</td>
+<td align="left">JCP2022_114690</td>
+<td align="left">ZOSXZYNSEHOBAO-UHFFFAOYSA-N</td>
 <td align="left">treatment</td>
 </tr>
 <tr class="odd">
-<td align="left">A1170497.C21</td>
-<td align="left">source_8</td>
-<td align="left">J3</td>
-<td align="left">A1170497</td>
-<td align="left">C21</td>
-<td align="left">JCP2022_048037</td>
-<td align="left">KZTOYYZXUSBOOI-UHFFFAOYSA-N</td>
+<td align="left">CP3-SC1-04.I09</td>
+<td align="left">source_7</td>
+<td align="left">20210727_Run3</td>
+<td align="left">CP3-SC1-04</td>
+<td align="left">I09</td>
+<td align="left">JCP2022_097094</td>
+<td align="left">VYFYYTLLBUKUHU-UHFFFAOYSA-N</td>
 <td align="left">treatment</td>
 </tr>
 <tr class="even">
-<td align="left">EC000074.E16</td>
-<td align="left">source_11</td>
-<td align="left">Batch5</td>
-<td align="left">EC000074</td>
-<td align="left">E16</td>
-<td align="left">JCP2022_035433</td>
-<td align="left">IJIFCXOMQONXIB-UHFFFAOYSA-N</td>
+<td align="left">Dest210622-143006.M07</td>
+<td align="left">source_10</td>
+<td align="left">2021_06_22_U2OS_48_hr_run8</td>
+<td align="left">Dest210622-143006</td>
+<td align="left">M07</td>
+<td align="left">JCP2022_017003</td>
+<td align="left">DNJATZDBTBSXML-UHFFFAOYSA-N</td>
 <td align="left">treatment</td>
 </tr>
 <tr class="odd">
-<td align="left">EC000006.C16</td>
-<td align="left">source_11</td>
-<td align="left">Batch1</td>
-<td align="left">EC000006</td>
-<td align="left">C16</td>
-<td align="left">JCP2022_038688</td>
-<td align="left">JBJVEVAAYISNNL-UHFFFAOYSA-N</td>
+<td align="left">GR00003286.N10</td>
+<td align="left">source_9</td>
+<td align="left">20211013-Run14</td>
+<td align="left">GR00003286</td>
+<td align="left">N10</td>
+<td align="left">JCP2022_043897</td>
+<td align="left">KDLVYURNHIOMKF-UHFFFAOYSA-N</td>
 <td align="left">treatment</td>
 </tr>
 <tr class="even">
-<td align="left">A1166167.G11</td>
-<td align="left">source_8</td>
-<td align="left">J4</td>
-<td align="left">A1166167</td>
-<td align="left">G11</td>
-<td align="left">JCP2022_018840</td>
-<td align="left">DXQIPLZMKHLJLK-UHFFFAOYSA-N</td>
+<td align="left">UL001795.H23</td>
+<td align="left">source_1</td>
+<td align="left">Batch5_20221030</td>
+<td align="left">UL001795</td>
+<td align="left">H23</td>
+<td align="left">JCP2022_046153</td>
+<td align="left">KPNIHJVKPJYDSL-UHFFFAOYSA-N</td>
 <td align="left">treatment</td>
 </tr>
 </tbody>
@@ -656,7 +671,8 @@ source.</li>
 <li><code>Metadata_Plate</code> and <code>Metadata_Well</code>: the
 physical plate and well coordinates.</li>
 <li><code>Metadata_JCP2022</code>: the perturbagen identifier used to
-join to compound metadata.</li>
+join to compound metadata, where the public alias
+<code>JUMP.CP.ID</code> is also available.</li>
 <li><code>Metadata_InChIKey</code>: the structure-level identifier for
 the perturbagen.</li>
 <li><code>Metadata_pert_type</code>: whether the well is a treatment,
@@ -761,13 +777,13 @@ columns are wells.</p>
 </tbody>
 </table>
 <pre class="r"><code>embedding_mat[1:6, 1:4]</code></pre>
-<pre><code>##      EC000129.N14 EC000143.J04 GR00003393.I27 APTJUM409.G14
-## [1,]    1.0770409    0.8908370      0.9871783     0.7183409
-## [2,]    2.4925351    2.3707497      2.7439189     2.6741426
-## [3,]    3.2410908    2.7300537      2.7871597     2.6272533
-## [4,]    2.0591762    2.0855560      1.2088797     1.6093497
-## [5,]    1.7929759    1.3521770      1.8385075     1.6991390
-## [6,]    0.6029491    0.5983434      2.0159001     0.8519574</code></pre>
+<pre><code>##      CP4-SC1-17.A13 CP1-SC1-21.E05 GR00004412.A27 UL001769.P34
+## [1,]      0.7846164      0.9088950       1.217037    1.1983480
+## [2,]      2.4524574      2.3928332       2.573188    2.7184100
+## [3,]      2.9531357      2.9322929       1.739103    1.5024635
+## [4,]      1.8645332      2.0388241       1.734603    2.0873072
+## [5,]      2.0057428      2.1586680       2.003108    2.0476625
+## [6,]      0.5371428      0.5223227       2.550724    0.7752874</code></pre>
 <p>The matrix and metadata are aligned by <code>sample_id</code>.</p>
 <pre class="r"><code>identical(colnames(embedding_mat), well_metadata$sample_id)</code></pre>
 <pre><code>## [1] TRUE</code></pre>
@@ -776,61 +792,74 @@ columns are wells.</p>
 <h2>Compound Metadata</h2>
 <pre class="r"><code>compound_preview &lt;- compound_metadata |&gt;
   select(
+    `JUMP.CP.ID`,
     Metadata_JCP2022,
-    Metadata_InChIKey,
+    InChIKey,
     Metadata_pert_type,
-    Metadata_Display_Name,
-    AnnotationDB_CID,
-    AnnotationDB_Has_Match
+    Molecule.Name,
+    Pubchem.CID,
+    `In.JUMP.CP`,
+    In_AnnotationDB
   ) |&gt;
   slice_head(n = 8)
 
 kable(compound_preview)</code></pre>
-<table>
+<table style="width:100%;">
 <colgroup>
+<col width="6%" />
+<col width="7%" />
+<col width="12%" />
 <col width="8%" />
-<col width="13%" />
-<col width="9%" />
-<col width="50%" />
-<col width="8%" />
-<col width="11%" />
+<col width="47%" />
+<col width="5%" />
+<col width="4%" />
+<col width="7%" />
 </colgroup>
 <thead>
 <tr class="header">
+<th align="left">JUMP.CP.ID</th>
 <th align="left">Metadata_JCP2022</th>
-<th align="left">Metadata_InChIKey</th>
+<th align="left">InChIKey</th>
 <th align="left">Metadata_pert_type</th>
-<th align="left">Metadata_Display_Name</th>
-<th align="right">AnnotationDB_CID</th>
-<th align="left">AnnotationDB_Has_Match</th>
+<th align="left">Molecule.Name</th>
+<th align="right">Pubchem.CID</th>
+<th align="left">In.JUMP.CP</th>
+<th align="left">In_AnnotationDB</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
+<td align="left">JCP2022_000001</td>
 <td align="left">JCP2022_000001</td>
 <td align="left">AAAHWCWPZPSPIW-UHFFFAOYSA-N</td>
 <td align="left">treatment</td>
 <td align="left">[4-[2-(Dimethylamino)ethoxy]phenyl]-[2-[6-(2-ethylimidazol-1-yl)-2-pyridinyl]pyrrolidin-1-yl]methanone</td>
 <td align="right">110094592</td>
 <td align="left">TRUE</td>
+<td align="left">TRUE</td>
 </tr>
 <tr class="even">
+<td align="left">JCP2022_000002</td>
 <td align="left">JCP2022_000002</td>
 <td align="left">AAAJHRMBUHXWLD-UHFFFAOYSA-N</td>
 <td align="left">treatment</td>
 <td align="left">1-(4-chlorobenzyl)tetrahydropyrimidin-2(1H)-one</td>
 <td align="right">5076487</td>
 <td align="left">TRUE</td>
+<td align="left">TRUE</td>
 </tr>
 <tr class="odd">
+<td align="left">JCP2022_000004</td>
 <td align="left">JCP2022_000004</td>
 <td align="left">AAANUZMCJQUYNX-UHFFFAOYSA-N</td>
 <td align="left">treatment</td>
 <td align="left">NA</td>
 <td align="right">NA</td>
+<td align="left">TRUE</td>
 <td align="left">FALSE</td>
 </tr>
 <tr class="even">
+<td align="left">JCP2022_000005</td>
 <td align="left">JCP2022_000005</td>
 <td align="left">AAAQFGUYHFJNHI-UHFFFAOYSA-N</td>
 <td align="left">treatment</td>
@@ -838,16 +867,20 @@ kable(compound_preview)</code></pre>
 6-(4-chlorophenyl)-N-ethyl-8-methoxy-1-methyl-</td>
 <td align="right">52934829</td>
 <td align="left">TRUE</td>
+<td align="left">TRUE</td>
 </tr>
 <tr class="odd">
+<td align="left">JCP2022_000006</td>
 <td align="left">JCP2022_000006</td>
 <td align="left">AAAROXVLYNJINN-UHFFFAOYSA-N</td>
 <td align="left">treatment</td>
 <td align="left">5-(1-Tert-butyl-5-cyclopropylpyrazol-3-yl)-3-(1-methylpyrazol-4-yl)-1,2,4-oxadiazole</td>
 <td align="right">72019641</td>
 <td align="left">TRUE</td>
+<td align="left">TRUE</td>
 </tr>
 <tr class="even">
+<td align="left">JCP2022_000007</td>
 <td align="left">JCP2022_000007</td>
 <td align="left">AAATVJFGQAZXQO-UHFFFAOYSA-N</td>
 <td align="left">treatment</td>
@@ -855,66 +888,66 @@ kable(compound_preview)</code></pre>
 2-[(3,5-dimethyl-1,2-oxazol-4-yl)methylsulfanyl]benzoate</td>
 <td align="right">16324273</td>
 <td align="left">TRUE</td>
+<td align="left">TRUE</td>
 </tr>
 <tr class="odd">
+<td align="left">JCP2022_000008</td>
 <td align="left">JCP2022_000008</td>
 <td align="left">AAAUIKUIDRZZQT-UHFFFAOYSA-N</td>
 <td align="left">treatment</td>
 <td align="left">N-(3-chlorophenyl)-2-(3-methyl-2-oxo-5-phenyl-2,3-dihydro-1H-1,4-benzodiazepin-1-yl)butanamide</td>
 <td align="right">15998487</td>
 <td align="left">TRUE</td>
+<td align="left">TRUE</td>
 </tr>
 <tr class="even">
+<td align="left">JCP2022_000009</td>
 <td align="left">JCP2022_000009</td>
 <td align="left">AAAZRMGPBSWFDK-UHFFFAOYSA-N</td>
 <td align="left">treatment</td>
 <td align="left">2-(2-(4-(2-(Trifluoromethyl)phenylsulfonyl)piperazin-1-yl)acetamido)thiophene-3-carboxamide</td>
 <td align="right">16231644</td>
 <td align="left">TRUE</td>
+<td align="left">TRUE</td>
 </tr>
 </tbody>
 </table>
 <p>This table is stored once at the object level instead of being
-repeated on every well. The join key is
-<code>Metadata_JCP2022</code>.</p>
+repeated on every well. The public join key is <code>JUMP.CP.ID</code>,
+and the compatibility alias <code>Metadata_JCP2022</code> is retained to
+simplify joins to the well-level metadata.</p>
 <p>The <code>Metadata_pert_type</code> labels also appear in the
 compound metadata. In this context, <code>negcon</code> denotes negative
 controls and <code>poscon</code> denotes positive controls.</p>
 <pre class="r"><code>negcon_examples &lt;- compound_metadata |&gt;
   filter(Metadata_pert_type == &quot;negcon&quot;) |&gt;
   select(
-    Metadata_JCP2022,
+    `JUMP.CP.ID`,
     Metadata_Control_Name,
-    Metadata_Display_Name,
-    AnnotationDB_CID
+    Molecule.Name,
+    Pubchem.CID
   ) |&gt;
   slice_head(n = 3)
 
 poscon_examples &lt;- compound_metadata |&gt;
   filter(Metadata_pert_type == &quot;poscon&quot;) |&gt;
   select(
-    Metadata_JCP2022,
+    `JUMP.CP.ID`,
     Metadata_Control_Name,
-    Metadata_Display_Name,
-    AnnotationDB_CID
+    Molecule.Name,
+    Pubchem.CID
   ) |&gt;
   slice_head(n = 3)
 
 kable(negcon_examples, caption = &quot;Example negative-control compounds&quot;)</code></pre>
 <table>
 <caption>Example negative-control compounds</caption>
-<colgroup>
-<col width="21%" />
-<col width="28%" />
-<col width="28%" />
-<col width="21%" />
-</colgroup>
 <thead>
 <tr class="header">
-<th align="left">Metadata_JCP2022</th>
+<th align="left">JUMP.CP.ID</th>
 <th align="left">Metadata_Control_Name</th>
-<th align="left">Metadata_Display_Name</th>
-<th align="right">AnnotationDB_CID</th>
+<th align="left">Molecule.Name</th>
+<th align="right">Pubchem.CID</th>
 </tr>
 </thead>
 <tbody>
@@ -929,18 +962,12 @@ kable(negcon_examples, caption = &quot;Example negative-control compounds&quot;)
 <pre class="r"><code>kable(poscon_examples, caption = &quot;Example positive-control compounds&quot;)</code></pre>
 <table>
 <caption>Example positive-control compounds</caption>
-<colgroup>
-<col width="21%" />
-<col width="28%" />
-<col width="28%" />
-<col width="21%" />
-</colgroup>
 <thead>
 <tr class="header">
-<th align="left">Metadata_JCP2022</th>
+<th align="left">JUMP.CP.ID</th>
 <th align="left">Metadata_Control_Name</th>
-<th align="left">Metadata_Display_Name</th>
-<th align="right">AnnotationDB_CID</th>
+<th align="left">Molecule.Name</th>
+<th align="right">Pubchem.CID</th>
 </tr>
 </thead>
 <tbody>
@@ -997,51 +1024,51 @@ kable(
 </thead>
 <tbody>
 <tr class="odd">
-<td align="left">EC000129.N14</td>
-<td align="left">N14</td>
-<td align="left">JCP2022_027967</td>
+<td align="left">CP4-SC1-17.A13</td>
+<td align="left">A13</td>
+<td align="left">JCP2022_041519</td>
 <td align="left">treatment</td>
 </tr>
 <tr class="even">
-<td align="left">EC000129.K12</td>
-<td align="left">K12</td>
-<td align="left">JCP2022_109087</td>
+<td align="left">CP4-SC1-17.C07</td>
+<td align="left">C07</td>
+<td align="left">JCP2022_017665</td>
 <td align="left">treatment</td>
 </tr>
 <tr class="odd">
-<td align="left">EC000129.B17</td>
-<td align="left">B17</td>
-<td align="left">JCP2022_023746</td>
-<td align="left">treatment</td>
-</tr>
-<tr class="even">
-<td align="left">EC000129.G03</td>
-<td align="left">G03</td>
-<td align="left">JCP2022_035526</td>
-<td align="left">treatment</td>
-</tr>
-<tr class="odd">
-<td align="left">EC000129.K22</td>
-<td align="left">K22</td>
-<td align="left">JCP2022_003770</td>
-<td align="left">treatment</td>
-</tr>
-<tr class="even">
-<td align="left">EC000129.E10</td>
-<td align="left">E10</td>
-<td align="left">JCP2022_022559</td>
-<td align="left">treatment</td>
-</tr>
-<tr class="odd">
-<td align="left">EC000129.F01</td>
-<td align="left">F01</td>
-<td align="left">JCP2022_064022</td>
+<td align="left">CP4-SC1-17.C24</td>
+<td align="left">C24</td>
+<td align="left">JCP2022_050797</td>
 <td align="left">poscon</td>
 </tr>
 <tr class="even">
-<td align="left">EC000129.B07</td>
-<td align="left">B07</td>
-<td align="left">JCP2022_082579</td>
+<td align="left">CP4-SC1-17.O11</td>
+<td align="left">O11</td>
+<td align="left">JCP2022_022234</td>
+<td align="left">treatment</td>
+</tr>
+<tr class="odd">
+<td align="left">CP4-SC1-17.L04</td>
+<td align="left">L04</td>
+<td align="left">JCP2022_031974</td>
+<td align="left">treatment</td>
+</tr>
+<tr class="even">
+<td align="left">CP4-SC1-17.A09</td>
+<td align="left">A09</td>
+<td align="left">JCP2022_058729</td>
+<td align="left">treatment</td>
+</tr>
+<tr class="odd">
+<td align="left">CP4-SC1-17.N11</td>
+<td align="left">N11</td>
+<td align="left">JCP2022_109812</td>
+<td align="left">treatment</td>
+</tr>
+<tr class="even">
+<td align="left">CP4-SC1-17.K16</td>
+<td align="left">K16</td>
+<td align="left">JCP2022_057347</td>
 <td align="left">treatment</td>
 </tr>
 </tbody>
@@ -1055,35 +1082,35 @@ kable(
   filter(Metadata_pert_type == &quot;treatment&quot;)
 
 plate_treatment_annotated &lt;- plate_treatment_wells |&gt;
-  select(
+  transmute(
     sample_id,
     Metadata_Source,
     Metadata_Plate,
     Metadata_Well,
-    Metadata_JCP2022
+    `JUMP.CP.ID` = Metadata_JCP2022
   ) |&gt;
   left_join(
     compound_metadata |&gt;
       select(
-        Metadata_JCP2022,
-        Metadata_Display_Name,
-        AnnotationDB_Name,
-        AnnotationDB_Has_Match
+        `JUMP.CP.ID`,
+        Molecule.Name,
+        Pubchem.CID,
+        In_AnnotationDB
       ),
-    by = &quot;Metadata_JCP2022&quot;
+    by = &quot;JUMP.CP.ID&quot;
   )
 
 kable(slice_head(plate_treatment_annotated, n = 8))</code></pre>
 <table>
 <colgroup>
-<col width="6%" />
-<col width="7%" />
-<col width="7%" />
-<col width="6%" />
-<col width="8%" />
-<col width="26%" />
-<col width="26%" />
-<col width="11%" />
+<col width="4%" />
+<col width="4%" />
+<col width="4%" />
+<col width="4%" />
+<col width="4%" />
+<col width="69%" />
+<col width="3%" />
+<col width="4%" />
 </colgroup>
 <thead>
 <tr class="header">
@@ -1091,91 +1118,93 @@ kable(slice_head(plate_treatment_annotated, n = 8))</code></pre>
 <th align="left">Metadata_Source</th>
 <th align="left">Metadata_Plate</th>
 <th align="left">Metadata_Well</th>
-<th align="left">Metadata_JCP2022</th>
-<th align="left">Metadata_Display_Name</th>
-<th align="left">AnnotationDB_Name</th>
-<th align="left">AnnotationDB_Has_Match</th>
+<th align="left">JUMP.CP.ID</th>
+<th align="left">Molecule.Name</th>
+<th align="right">Pubchem.CID</th>
+<th align="left">In_AnnotationDB</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
-<td align="left">EC000129.N14</td>
-<td align="left">source_11</td>
-<td align="left">EC000129</td>
-<td align="left">N14</td>
-<td align="left">JCP2022_027967</td>
-<td align="left">NA</td>
-<td align="left">NA</td>
-<td align="left">FALSE</td>
+<td align="left">CP4-SC1-17.A13</td>
+<td align="left">source_7</td>
+<td align="left">CP4-SC1-17</td>
+<td align="left">A13</td>
+<td align="left">JCP2022_041519</td>
+<td align="left">IRAK inhibitor 6</td>
+<td align="right">44449392</td>
+<td align="left">TRUE</td>
 </tr>
 <tr class="even">
-<td align="left">EC000129.K12</td>
-<td align="left">source_11</td>
-<td align="left">EC000129</td>
-<td align="left">K12</td>
-<td align="left">JCP2022_109087</td>
-<td align="left">NA</td>
-<td align="left">NA</td>
-<td align="left">FALSE</td>
-</tr>
-<tr class="odd">
-<td align="left">EC000129.B17</td>
-<td align="left">source_11</td>
-<td align="left">EC000129</td>
-<td align="left">B17</td>
-<td align="left">JCP2022_023746</td>
-<td align="left">NA</td>
-<td align="left">NA</td>
-<td align="left">FALSE</td>
-</tr>
-<tr class="even">
-<td align="left">EC000129.G03</td>
-<td align="left">source_11</td>
-<td align="left">EC000129</td>
-<td align="left">G03</td>
-<td align="left">JCP2022_035526</td>
-<td align="left">Ethyl 3-[(morpholin-4-ylcarbonyl)amino]benzoate</td>
-<td align="left">Ethyl 3-[(morpholin-4-ylcarbonyl)amino]benzoate</td>
+<td align="left">CP4-SC1-17.C07</td>
+<td align="left">source_7</td>
+<td align="left">CP4-SC1-17</td>
+<td align="left">C07</td>
+<td align="left">JCP2022_017665</td>
+<td align="left">N-[3-(3-Amino-1-hydroxy-3-oxopropyl)-6-[1,2-dihydroxy-2-(4-hydroxyphenyl)ethyl]-11,20,21,25-tetrahydroxy-15-(1-hydroxyethyl)-2,5,8,14,17,23-hexaoxo-1,4,7,13,16,22-hexazatricyclo[22.3.0.09,13]heptacosan-18-yl]-10,12-dimethyltetradecanamide</td>
+<td align="right">15115604</td>
 <td align="left">TRUE</td>
 </tr>
 <tr class="odd">
-<td align="left">EC000129.K22</td>
-<td align="left">source_11</td>
-<td align="left">EC000129</td>
-<td align="left">K22</td>
-<td align="left">JCP2022_003770</td>
-<td align="left">2-ethoxy-N-(5-ethyl-1,3,4-thiadiazol-2-yl)benzamide</td>
-<td align="left">2-ethoxy-N-(5-ethyl-1,3,4-thiadiazol-2-yl)benzamide</td>
+<td align="left">CP4-SC1-17.O11</td>
+<td align="left">source_7</td>
+<td align="left">CP4-SC1-17</td>
+<td align="left">O11</td>
+<td align="left">JCP2022_022234</td>
+<td align="left">Indirubin-3’-monoxime</td>
+<td align="right">3707</td>
 <td align="left">TRUE</td>
 </tr>
 <tr class="even">
-<td align="left">EC000129.E10</td>
-<td align="left">source_11</td>
-<td align="left">EC000129</td>
-<td align="left">E10</td>
-<td align="left">JCP2022_022559</td>
-<td align="left">N-(5-methyl-1,2-oxazol-3-yl)-2-phenoxybutanamide</td>
-<td align="left">N-(5-methyl-1,2-oxazol-3-yl)-2-phenoxybutanamide</td>
+<td align="left">CP4-SC1-17.L04</td>
+<td align="left">source_7</td>
+<td align="left">CP4-SC1-17</td>
+<td align="left">L04</td>
+<td align="left">JCP2022_031974</td>
+<td align="left">(5-Methyl-3-(morpholinomethyl)-2,3-dihydro-[1,4]oxazino[2,3,4-hi]indol-6-yl)(naphthalen-1-yl)methanone</td>
+<td align="right">5689</td>
 <td align="left">TRUE</td>
 </tr>
 <tr class="odd">
-<td align="left">EC000129.B07</td>
-<td align="left">source_11</td>
-<td align="left">EC000129</td>
-<td align="left">B07</td>
-<td align="left">JCP2022_082579</td>
-<td align="left">5-chloro-N-(furan-2-ylmethyl)-2-methoxybenzamide</td>
-<td align="left">5-chloro-N-(furan-2-ylmethyl)-2-methoxybenzamide</td>
+<td align="left">CP4-SC1-17.A09</td>
+<td align="left">source_7</td>
+<td align="left">CP4-SC1-17</td>
+<td align="left">A09</td>
+<td align="left">JCP2022_058729</td>
+<td align="left">Spiro[3,5,8-ethanylylidene-1H-pyrano[3,4-c]pyridine-10,3’-[3H]indol]-2’(1’H)-one,
+5-ethenyl-3,4,4a,5,6,7,8,8a-octahydro-7-methyl-</td>
+<td align="right">279057</td>
 <td align="left">TRUE</td>
 </tr>
 <tr class="even">
-<td align="left">EC000129.H09</td>
-<td align="left">source_11</td>
-<td align="left">EC000129</td>
-<td align="left">H09</td>
-<td align="left">JCP2022_001659</td>
-<td align="left">N-(6-methoxy-1,3-benzothiazol-2-yl)-2-methylbutanamide</td>
-<td align="left">N-(6-methoxy-1,3-benzothiazol-2-yl)-2-methylbutanamide</td>
+<td align="left">CP4-SC1-17.N11</td>
+<td align="left">source_7</td>
+<td align="left">CP4-SC1-17</td>
+<td align="left">N11</td>
+<td align="left">JCP2022_109812</td>
+<td align="left">6-[[4,4,6a,6b,11,11,14b-Heptamethyl-8a-[3,4,5-trihydroxy-6-(hydroxymethyl)oxan-2-yl]oxycarbonyl-1,2,3,4a,5,6,7,8,9,10,12,12a,14,14a-tetradecahydropicen-3-yl]oxy]-3,4,5-trihydroxyoxane-2-carboxylic
+acid</td>
+<td align="right">13909679</td>
+<td align="left">TRUE</td>
+</tr>
+<tr class="odd">
+<td align="left">CP4-SC1-17.K16</td>
+<td align="left">source_7</td>
+<td align="left">CP4-SC1-17</td>
+<td align="left">K16</td>
+<td align="left">JCP2022_057347</td>
+<td align="left">Tyrphostin AG 528</td>
+<td align="right">4886983</td>
+<td align="left">TRUE</td>
+</tr>
+<tr class="even">
+<td align="left">CP4-SC1-17.C16</td>
+<td align="left">source_7</td>
+<td align="left">CP4-SC1-17</td>
+<td align="left">C16</td>
+<td align="left">JCP2022_004868</td>
+<td align="left">N-(4-fluorophenyl)benzenesulfonamide</td>
+<td align="right">295229</td>
 <td align="left">TRUE</td>
 </tr>
 </tbody>
@@ -1187,9 +1216,16 @@ kable(slice_head(plate_treatment_annotated, n = 8))</code></pre>
 treatment_embeddings &lt;- embedding_mat[, treatment_wells$sample_id, drop = FALSE]
 
 treatment_annotations &lt;- treatment_wells |&gt;
+  transmute(
+    sample_id,
+    Metadata_Source,
+    Metadata_Plate,
+    Metadata_Well,
+    `JUMP.CP.ID` = Metadata_JCP2022
+  ) |&gt;
   left_join(
     compound_metadata,
-    by = &quot;Metadata_JCP2022&quot;
+    by = &quot;JUMP.CP.ID&quot;
   )</code></pre>
 </div>
 <div id="extract-embeddings-for-a-small-well-set" class="section level3">
@@ -1197,17 +1233,17 @@ treatment_annotations &lt;- treatment_wells |&gt;
 <pre class="r"><code>example_wells &lt;- plate_treatment_wells$sample_id[1:4]
 
 embedding_mat[1:10, example_wells, drop = FALSE]</code></pre>
-<pre><code>##       EC000129.N14 EC000129.K12 EC000129.B17 EC000129.G03
-##  [1,]    1.0770409    0.9987205    1.1078197    1.0669323
-##  [2,]    2.4925351    2.5172107    2.6149697    2.4479828
-##  [3,]    3.2410908    3.2513907    3.0818202    3.1355700
-##  [4,]    2.0591762    2.0582409    2.0564172    2.0716841
-##  [5,]    1.7929759    1.7496499    1.7244167    1.7450385
-##  [6,]    0.6029491    0.6067196    0.6373782    0.5976292
-##  [7,]    2.6986654    2.7526233    2.7203248    2.7960191
-##  [8,]    1.4007258    1.3441015    1.3709917    1.2194285
-##  [9,]    1.4604049    1.5356106    1.4057891    1.4204760
-## [10,]    1.1348435    1.1401212    1.0822593    1.1982322</code></pre>
+<pre><code>##       CP4-SC1-17.A13 CP4-SC1-17.C07 CP4-SC1-17.O11 CP4-SC1-17.L04
+##  [1,]      0.7846164      0.8087292      0.7535809      0.7336237
+##  [2,]      2.4524574      2.4113977      2.4606078      2.4279490
+##  [3,]      2.9531357      2.9464214      2.8733964      3.0436823
+##  [4,]      1.8645332      1.8808967      1.8945332      1.9154944
+##  [5,]      2.0057428      2.2006238      2.0879121      2.1623740
+##  [6,]      0.5371428      0.5369661      0.5416409      0.5364244
+##  [7,]      1.9170477      2.0605760      1.9210247      1.9385906
+##  [8,]      1.5122356      1.6049142      1.6110724      1.7710512
+##  [9,]      1.4911249      1.4500443      1.4323514      1.4498693
+## [10,]      1.0835733      1.1001953      1.0554390      1.1024420</code></pre>
 <p>This gives a small feature-by-well slice. For modeling or distance
 calculations, the wells are typically subset first and the result is
 then kept as a matrix.</p>
@@ -1239,17 +1275,18 @@ and one column per embedding feature.</p>
 <h2>Session Info</h2>
 <pre class="r"><code>sessionInfo()</code></pre>
 <pre><code>## R version 4.5.3 (2026-03-11)
-## Platform: aarch64-apple-darwin20.0.0
+## Platform: aarch64-apple-darwin25.3.0
 ## Running under: macOS Tahoe 26.4
 ## 
 ## Matrix products: default
-## BLAS/LAPACK: /Users/michael/Projects/BHKLab/ARPA-H/cpg0016-emb-pipeline/.pixi/envs/default/lib/libopenblas.0.dylib;  LAPACK version 3.12.0
+## BLAS:   /opt/homebrew/Cellar/openblas/0.3.32/lib/libopenblasp-r0.3.32.dylib 
+## LAPACK: /opt/homebrew/Cellar/r/4.5.3/lib/R/lib/libRlapack.dylib;  LAPACK version 3.12.1
 ## 
 ## locale:
 ## [1] C.UTF-8/C.UTF-8/C.UTF-8/C/C.UTF-8/C.UTF-8
 ## 
 ## time zone: America/Toronto
-## tzcode source: system (macOS)
+## tzcode source: internal
 ## 
 ## attached base packages:
 ## [1] stats4    stats     graphics  grDevices utils     datasets  methods  
@@ -1258,29 +1295,29 @@ and one column per embedding feature.</p>
 ## other attached packages:
 ##  [1] scales_1.4.0                knitr_1.51                 
 ##  [3] ggplot2_4.0.2               tibble_3.3.1               
-##  [5] dplyr_1.2.0                 MultiAssayExperiment_1.36.1
-##  [7] SummarizedExperiment_1.40.0 Biobase_2.70.0             
-##  [9] GenomicRanges_1.62.1        Seqinfo_1.0.0              
-## [11] IRanges_2.44.0              S4Vectors_0.48.0           
-## [13] BiocGenerics_0.56.0         generics_0.1.4             
-## [15] MatrixGenerics_1.22.0       matrixStats_1.5.0          
+##  [5] dplyr_1.2.0                 MultiAssayExperiment_1.34.0
+##  [7] SummarizedExperiment_1.38.1 Biobase_2.68.0             
+##  [9] GenomicRanges_1.60.0        GenomeInfoDb_1.44.3        
+## [11] IRanges_2.42.0              S4Vectors_0.46.0           
+## [13] BiocGenerics_0.54.1         generics_0.1.4             
+## [15] MatrixGenerics_1.20.0       matrixStats_1.5.0          
 ## 
 ## loaded via a namespace (and not attached):
-##  [1] sass_0.4.10          SparseArray_1.10.8   lattice_0.22-9      
-##  [4] digest_0.6.39        magrittr_2.0.4       evaluate_1.0.5      
-##  [7] grid_4.5.3           RColorBrewer_1.1-3   fastmap_1.2.0       
-## [10] jsonlite_2.0.0       Matrix_1.7-4         purrr_1.2.1         
-## [13] jquerylib_0.1.4      abind_1.4-8          cli_3.6.5           
-## [16] rlang_1.1.7          XVector_0.50.0       bit64_4.6.0-1       
-## [19] withr_3.0.2          cachem_1.1.0         DelayedArray_0.36.0 
-## [22] yaml_2.3.12          BiocBaseUtils_1.12.0 S4Arrays_1.10.1     
-## [25] tools_4.5.3          assertthat_0.2.1     vctrs_0.7.2         
-## [28] R6_2.6.1             lifecycle_1.0.5      bit_4.6.0           
-## [31] arrow_23.0.1         pkgconfig_2.0.3      pillar_1.11.1       
-## [34] bslib_0.10.0         gtable_0.3.6         glue_1.8.0          
-## [37] xfun_0.57            tidyselect_1.2.1     farver_2.1.2        
-## [40] htmltools_0.5.9      labeling_0.4.3       rmarkdown_2.31      
-## [43] compiler_4.5.3       S7_0.2.1</code></pre>
+##  [1] sass_0.4.10             SparseArray_1.8.1       lattice_0.22-9         
+##  [4] digest_0.6.39           magrittr_2.0.4          RColorBrewer_1.1-3     
+##  [7] evaluate_1.0.5          grid_4.5.3              fastmap_1.2.0          
+## [10] jsonlite_2.0.0          Matrix_1.7-5            httr_1.4.8             
+## [13] UCSC.utils_1.4.0        jquerylib_0.1.4         abind_1.4-8            
+## [16] cli_3.6.5               rlang_1.1.7             crayon_1.5.3           
+## [19] XVector_0.48.0          withr_3.0.2             cachem_1.1.0           
+## [22] DelayedArray_0.34.1     yaml_2.3.12             otel_0.2.0             
+## [25] BiocBaseUtils_1.10.0    S4Arrays_1.8.1          tools_4.5.3            
+## [28] GenomeInfoDbData_1.2.14 vctrs_0.7.2             R6_2.6.1               
+## [31] lifecycle_1.0.5         pkgconfig_2.0.3         bslib_0.10.0           
+## [34] pillar_1.11.1           gtable_0.3.6            glue_1.8.0             
+## [37] xfun_0.57               tidyselect_1.2.1        farver_2.1.2           
+## [40] htmltools_0.5.9         labeling_0.4.3          rmarkdown_2.31         
+## [43] compiler_4.5.3          S7_0.2.1</code></pre>
 </div>
 
 

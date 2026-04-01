@@ -31,7 +31,9 @@ The MAE export is assembled by `workflow/scripts/build_mae.R`:
 
 - `sample_id` is built as `Metadata_Plate.Metadata_Well`
 - `colData` keeps curated per-well fields plus both `Metadata_JCP2022` and `Metadata_InChIKey`
-- per-drug metadata is stored once at `metadata(mae)$compound_metadata`, keyed by `Metadata_JCP2022`
+- `metadata(mae)$dataset_name` and `metadata(mae)$dataset_version` label the public export as `JUMP Cell Painting cpg0016 CPCNN Embedding MAE v1.1`
+- public per-drug metadata is stored once at `metadata(mae)$compound_metadata`, keyed by `JUMP.CP.ID` with `Metadata_JCP2022` retained as a compatibility alias
+- HDD-aligned shared compound fields in `metadata(mae)$compound_metadata` include `JUMP.CP.ID`, `Pubchem.CID`, `Molecule.Name`, `InChIKey`, `SMILES`, and `In.JUMP.CP`
 - the CPCNN `all_emb` list column is materialized as one `SummarizedExperiment` named `all_emb` with assay name `embedding`
 - the final object is saved as a single `MultiAssayExperiment` to RDS file
 

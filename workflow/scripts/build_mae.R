@@ -6,6 +6,8 @@ library(yaml)
 
 PROFILE_MODEL_CPCNN <- "cpcnn_zenodo_7114558"
 EMBEDDING_COLUMN_CPCNN <- "all_emb"
+DATASET_NAME <- "JUMP Cell Painting cpg0016 CPCNN Embedding MAE"
+DATASET_VERSION <- "v1.1"
 RAW_PROFILE_IDENTIFIER_COLUMNS <- c("source", "batch", "plate", "well")
 WELL_METADATA_COLUMNS <- c(
   "Metadata_Source",
@@ -28,6 +30,13 @@ COL_DATA_COLUMNS <- c(
   "Metadata_pert_type"
 )
 COMPOUND_METADATA_KEY <- "Metadata_JCP2022"
+PUBLIC_COMPOUND_METADATA_KEY <- "JUMP.CP.ID"
+PUBLIC_COMPOUND_METADATA_RENAMES <- c(
+  "Metadata_InChIKey" = "InChIKey",
+  "Metadata_Display_Name" = "Molecule.Name",
+  "Metadata_SMILES" = "SMILES",
+  "AnnotationDB_CID" = "Pubchem.CID"
+)
 
 stopf <- function(message, ...) {
   stop(sprintf(message, ...), call. = FALSE)
@@ -56,6 +65,41 @@ split_pipe_strings <- function(values) {
       strsplit(value, "|", fixed = TRUE)[[1L]]
     }
   }))
+}
+
+rename_columns <- function(frame, renames) {
+  matched_columns <- intersect(names(renames), colnames(frame))
+  if (length(matched_columns) == 0L) {
+    return(frame)
+  }
+
+  colnames(frame)[match(matched_columns, colnames(frame))] <-
+    unname(renames[matched_columns])
+  frame
+}
+
+build_public_compound_metadata <- function(frame) {
+  public_frame <- frame
+  public_frame[[PUBLIC_COMPOUND_METADATA_KEY]] <- public_frame[[
+    COMPOUND_METADATA_KEY
+  ]]
+  public_frame[["In.JUMP.CP"]] <- TRUE
+  public_frame <- rename_columns(public_frame, PUBLIC_COMPOUND_METADATA_RENAMES)
+
+  preferred_columns <- c(
+    PUBLIC_COMPOUND_METADATA_KEY,
+    COMPOUND_METADATA_KEY,
+    "Pubchem.CID",
+    "InChIKey",
+    "SMILES",
+    "Molecule.Name",
+    "In.JUMP.CP"
+  )
+  ordered_columns <- c(
+    preferred_columns[preferred_columns %in% colnames(public_frame)],
+    setdiff(colnames(public_frame), preferred_columns)
+  )
+  public_frame[, ordered_columns, drop = FALSE]
 }
 
 build_sample_ids <- function(frame) {
@@ -230,9 +274,18 @@ if ("Metadata_Control_Name" %in% names(compound_metadata)) {
   compound_metadata$Metadata_Control_Name <-
     normalize_blank_to_na(compound_metadata$Metadata_Control_Name)
 }
-if ("AnnotationDB_Has_Match" %in% names(compound_metadata)) {
-  compound_metadata$AnnotationDB_Has_Match <-
-    tolower(as.character(compound_metadata$AnnotationDB_Has_Match)) == "true"
+if (
+  "AnnotationDB_Has_Match" %in%
+    names(compound_metadata) &&
+    !("In_AnnotationDB" %in% names(compound_metadata))
+) {
+  names(compound_metadata)[
+    names(compound_metadata) == "AnnotationDB_Has_Match"
+  ] <- "In_AnnotationDB"
+}
+if ("In_AnnotationDB" %in% names(compound_metadata)) {
+  compound_metadata$In_AnnotationDB <-
+    tolower(as.character(compound_metadata$In_AnnotationDB)) == "true"
 }
 if (anyDuplicated(compound_metadata[[COMPOUND_METADATA_KEY]]) > 0L) {
   stopf("compound_metadata.tsv contains duplicate Metadata_JCP2022 rows")
@@ -267,9 +320,10 @@ row.names(col_data_frame) <- sample_id
 col_data <- S4Vectors::DataFrame(col_data_frame, row.names = sample_id)
 
 compound_metadata_row_names <- compound_metadata[[COMPOUND_METADATA_KEY]]
-row.names(compound_metadata) <- compound_metadata_row_names
+public_compound_metadata <- build_public_compound_metadata(compound_metadata)
+row.names(public_compound_metadata) <- compound_metadata_row_names
 compound_metadata_df <- S4Vectors::DataFrame(
-  compound_metadata,
+  public_compound_metadata,
   row.names = compound_metadata_row_names
 )
 if ("Metadata_Compound_Sources" %in% names(compound_metadata_df)) {
@@ -361,6 +415,8 @@ if (!identical(colnames(all_emb_experiment), sample_id)) {
 }
 
 metadata(mae) <- list(
+  dataset_name = DATASET_NAME,
+  dataset_version = DATASET_VERSION,
   profile_model = profile_model,
   model_stem = model_stem,
   embedding_columns = embedding_columns,
@@ -371,7 +427,7 @@ metadata(mae) <- list(
   pipeline_config = yaml::read_yaml(config_path, eval.expr = FALSE),
   manifest = read_tsv(manifest_path),
   manifest_summary = read_tsv(manifest_summary_path),
-  compound_metadata_key = COMPOUND_METADATA_KEY,
+  compound_metadata_key = PUBLIC_COMPOUND_METADATA_KEY,
   compound_metadata = compound_metadata_df
 )
 

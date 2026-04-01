@@ -1,5 +1,5 @@
 ---
-title: "Cell Painting cpg0016-jump Embedding MAE"
+title: "JUMP Cell Painting cpg0016 CPCNN Embedding MAE v1.1"
 author: "Michael Tran"
 date: "`r format(Sys.Date(), '%Y-%m-%d')`"
 output:
@@ -8,8 +8,9 @@ output:
     toc_depth: 3
 ---
 
-This notebook demonstrates the structure and basic use of a `MultiAssayExperiment`
-containing well-level Cell Painting embeddings and compound annotations.
+This notebook demonstrates the structure and basic use of JUMP Cell Painting
+cpg0016 CPCNN Embedding MAE v1.1, a `MultiAssayExperiment` containing well-level
+Cell Painting embeddings and compound annotations.
 
 ## Setup
 
@@ -56,6 +57,9 @@ if (!file.exists(mae_path)) {
 mae <- readRDS(mae_path)
 embedding_se <- experiments(mae)[["all_emb"]]
 embedding_mat <- assay(embedding_se, "embedding")
+dataset_name <- metadata(mae)$dataset_name
+dataset_version <- metadata(mae)$dataset_version
+dataset_label <- paste(dataset_name, dataset_version)
 
 well_metadata <- as.data.frame(colData(mae)) |>
   rownames_to_column("sample_id") |>
@@ -103,18 +107,23 @@ overview_tbl <- tibble(
 kable(overview_tbl)
 ```
 
-This file contains `r scales::comma(ncol(embedding_mat))` wells as columns of a single embedding assay named `embedding`. Each well has a `r scales::comma(nrow(embedding_mat))`-dimensional feature vector and a matching row in `colData(mae)`.
+`r dataset_label` contains `r scales::comma(ncol(embedding_mat))` wells as
+columns of a single embedding assay named `embedding`. Each well has a
+`r scales::comma(nrow(embedding_mat))`-dimensional feature vector and a
+matching row in `colData(mae)`.
 
 ## Inspect the MAE Structure
 
 The object layout is inspected directly below. The experiment container, assay
-name, well-level metadata, and object-level metadata can all be accessed from
+name, dataset label, well-level metadata, and object-level metadata can all be accessed from
 the printed structure and the code shown in this section.
 
 ```{r object-contents}
 mae
 
 experiments(mae)
+
+metadata(mae)[c("dataset_name", "dataset_version", "compound_metadata_key")]
 
 colnames(colData(mae))
 
@@ -133,7 +142,7 @@ The main fields commonly used in downstream analysis are:
 * `Metadata_Source`: the source-specific study label.
 * `Metadata_Batch`: the batch identifier within a source.
 * `Metadata_Plate` and `Metadata_Well`: the physical plate and well coordinates.
-* `Metadata_JCP2022`: the perturbagen identifier used to join to compound metadata.
+* `Metadata_JCP2022`: the perturbagen identifier used to join to compound metadata, where the public alias `JUMP.CP.ID` is also available.
 * `Metadata_InChIKey`: the structure-level identifier for the perturbagen.
 * `Metadata_pert_type`: whether the well is a treatment, negative control (`negcon`), or positive control (`poscon`).
 
@@ -194,12 +203,14 @@ identical(colnames(embedding_mat), well_metadata$sample_id)
 ```{r compound-metadata-head}
 compound_preview <- compound_metadata |>
   select(
+    `JUMP.CP.ID`,
     Metadata_JCP2022,
-    Metadata_InChIKey,
+    InChIKey,
     Metadata_pert_type,
-    Metadata_Display_Name,
-    AnnotationDB_CID,
-    AnnotationDB_Has_Match
+    Molecule.Name,
+    Pubchem.CID,
+    `In.JUMP.CP`,
+    In_AnnotationDB
   ) |>
   slice_head(n = 8)
 
@@ -207,7 +218,8 @@ kable(compound_preview)
 ```
 
 This table is stored once at the object level instead of being repeated on
-every well. The join key is `Metadata_JCP2022`.
+every well. The public join key is `JUMP.CP.ID`, and the compatibility alias
+`Metadata_JCP2022` is retained to simplify joins to the well-level metadata.
 
 The `Metadata_pert_type` labels also appear in the compound metadata. In this
 context, `negcon` denotes negative controls and `poscon` denotes positive
@@ -217,20 +229,20 @@ controls.
 negcon_examples <- compound_metadata |>
   filter(Metadata_pert_type == "negcon") |>
   select(
-    Metadata_JCP2022,
+    `JUMP.CP.ID`,
     Metadata_Control_Name,
-    Metadata_Display_Name,
-    AnnotationDB_CID
+    Molecule.Name,
+    Pubchem.CID
   ) |>
   slice_head(n = 3)
 
 poscon_examples <- compound_metadata |>
   filter(Metadata_pert_type == "poscon") |>
   select(
-    Metadata_JCP2022,
+    `JUMP.CP.ID`,
     Metadata_Control_Name,
-    Metadata_Display_Name,
-    AnnotationDB_CID
+    Molecule.Name,
+    Pubchem.CID
   ) |>
   slice_head(n = 3)
 
@@ -272,22 +284,22 @@ plate_treatment_wells <- plate_wells |>
   filter(Metadata_pert_type == "treatment")
 
 plate_treatment_annotated <- plate_treatment_wells |>
-  select(
+  transmute(
     sample_id,
     Metadata_Source,
     Metadata_Plate,
     Metadata_Well,
-    Metadata_JCP2022
+    `JUMP.CP.ID` = Metadata_JCP2022
   ) |>
   left_join(
     compound_metadata |>
       select(
-        Metadata_JCP2022,
-        Metadata_Display_Name,
-        AnnotationDB_Name,
-        AnnotationDB_Has_Match
+        `JUMP.CP.ID`,
+        Molecule.Name,
+        Pubchem.CID,
+        In_AnnotationDB
       ),
-    by = "Metadata_JCP2022"
+    by = "JUMP.CP.ID"
   )
 
 kable(slice_head(plate_treatment_annotated, n = 8))
@@ -302,9 +314,16 @@ treatment_wells <- well_metadata |>
 treatment_embeddings <- embedding_mat[, treatment_wells$sample_id, drop = FALSE]
 
 treatment_annotations <- treatment_wells |>
+  transmute(
+    sample_id,
+    Metadata_Source,
+    Metadata_Plate,
+    Metadata_Well,
+    `JUMP.CP.ID` = Metadata_JCP2022
+  ) |>
   left_join(
     compound_metadata,
-    by = "Metadata_JCP2022"
+    by = "JUMP.CP.ID"
   )
 ```
 
