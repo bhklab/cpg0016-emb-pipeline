@@ -2,4 +2,4 @@
 
 Downloaded source files live here. The pipeline assumes source metadata under `rawdata/metadata/` and model/profile downloads under source/model subdirectories.
 
-Expected usage depends on configured sources and models. A full default run with CPCNN and CellProfiler downloads per-source CPCNN profiles plus the assembled CellProfiler COMPOUND profile table, and can require several GB to tens of GB in this directory. Files here are ignored by git.
+Observed usage after the latest default run with CPCNN and CellProfiler is about 5.8 GB. This includes per-source CPCNN profiles, the assembled CellProfiler COMPOUND profile table, source metadata, and AnnotationDB metadata. Files here are ignored by git.

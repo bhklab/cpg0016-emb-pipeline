@@ -6,4 +6,4 @@ Final outputs live here:
 - `cpg0016_emb_tables/`
 - `cpg0016_emb_tables.tar.gz`
 
-Expected usage depends on selected models and profile coverage. Plan for several GB to tens of GB for full outputs. Generated results are ignored by git.
+Observed usage after the latest default run with CPCNN and CellProfiler is about 17 GB. This includes the MAE RDS, MAE-derived table directory, and compressed table archive. Generated results are ignored by git.
