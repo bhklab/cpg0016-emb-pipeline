@@ -1,121 +1,91 @@
-library(arrow)
-library(MultiAssayExperiment)
-library(S4Vectors)
-library(SummarizedExperiment)
-library(yaml)
+suppressPackageStartupMessages({
+  library(arrow)
+  library(MultiAssayExperiment)
+  library(S4Vectors)
+  library(SummarizedExperiment)
+  library(yaml)
+})
 
-PROFILE_MODEL_CPCNN <- "cpcnn_zenodo_7114558"
-EMBEDDING_COLUMN_CPCNN <- "all_emb"
-DATASET_NAME <- "JUMP Cell Painting cpg0016 CPCNN Embedding MAE"
-DATASET_VERSION <- "v1.1"
-RAW_PROFILE_IDENTIFIER_COLUMNS <- c("source", "batch", "plate", "well")
-WELL_METADATA_COLUMNS <- c(
-  "Metadata_Source",
-  "Metadata_Batch",
-  "Metadata_Plate",
-  "Metadata_Well",
-  "Metadata_JCP2022",
-  "Metadata_InChIKey",
-  "Metadata_PlateType",
-  "Metadata_pert_type",
-  "Metadata_Is_Compound"
-)
-COL_DATA_COLUMNS <- c(
-  "Metadata_Source",
-  "Metadata_Batch",
-  "Metadata_Plate",
-  "Metadata_Well",
-  "Metadata_JCP2022",
-  "Metadata_InChIKey",
-  "Metadata_pert_type"
-)
-COMPOUND_METADATA_KEY <- "Metadata_JCP2022"
-PUBLIC_COMPOUND_METADATA_KEY <- "JUMP.CP.ID"
-PUBLIC_COMPOUND_METADATA_RENAMES <- c(
-  "Metadata_InChIKey" = "InChIKey",
-  "Metadata_Display_Name" = "Molecule.Name",
-  "Metadata_SMILES" = "SMILES",
-  "AnnotationDB_CID" = "Pubchem.CID"
-)
+set_vector_memory_limit <- function() {
+  if (!exists("mem.maxVSize", mode = "function")) {
+    return(invisible(NULL))
+  }
+  target_gb <- Sys.getenv("PIPELINE_R_MAX_VSIZE_GB", "64")
+  target_mb <- suppressWarnings(as.numeric(target_gb) * 1024)
+  if (tolower(target_gb) %in% c("inf", "infinite")) {
+    target_mb <- Inf
+  }
+  if (is.na(target_mb)) {
+    return(invisible(NULL))
+  }
+  current_mb <- mem.maxVSize()
+  if (
+    !is.finite(current_mb) || is.infinite(target_mb) || current_mb < target_mb
+  ) {
+    try(mem.maxVSize(target_mb), silent = TRUE)
+  }
+  invisible(NULL)
+}
+
+set_vector_memory_limit()
 
 stopf <- function(message, ...) {
   stop(sprintf(message, ...), call. = FALSE)
+}
+
+split_param <- function(value) {
+  if (is.null(value) || !nzchar(value)) {
+    return(character())
+  }
+  strsplit(value, ",", fixed = TRUE)[[1L]]
 }
 
 read_tsv <- function(path) {
   utils::read.delim(
     path,
     sep = "\t",
+    quote = "\"",
+    comment.char = "",
+    na.strings = "NA",
     check.names = FALSE,
     stringsAsFactors = FALSE
   )
 }
 
 normalize_blank_to_na <- function(values) {
+  values <- as.character(values)
   blank <- !is.na(values) & !nzchar(trimws(values))
   values[blank] <- NA_character_
   values
 }
 
-split_pipe_strings <- function(values) {
-  IRanges::CharacterList(lapply(values, function(value) {
-    if (is.na(value) || !nzchar(value)) {
-      character()
-    } else {
-      strsplit(value, "|", fixed = TRUE)[[1L]]
-    }
-  }))
-}
-
-rename_columns <- function(frame, renames) {
-  matched_columns <- intersect(names(renames), colnames(frame))
-  if (length(matched_columns) == 0L) {
-    return(frame)
+first_non_missing <- function(...) {
+  values <- list(...)
+  out <- rep(NA_character_, length(values[[1L]]))
+  for (value in values) {
+    value <- normalize_blank_to_na(value)
+    replace <- is.na(out) & !is.na(value)
+    out[replace] <- value[replace]
   }
-
-  colnames(frame)[match(matched_columns, colnames(frame))] <-
-    unname(renames[matched_columns])
-  frame
+  out
 }
 
-build_public_compound_metadata <- function(frame) {
-  public_frame <- frame
-  public_frame[[PUBLIC_COMPOUND_METADATA_KEY]] <- public_frame[[
-    COMPOUND_METADATA_KEY
-  ]]
-  public_frame[["In.JUMP.CP"]] <- TRUE
-  public_frame <- rename_columns(public_frame, PUBLIC_COMPOUND_METADATA_RENAMES)
+as_logical_flag <- function(values) {
+  if (is.logical(values)) {
+    return(values)
+  }
+  lowered <- tolower(trimws(as.character(values)))
+  out <- lowered %in% c("true", "t", "1", "yes")
+  out[is.na(values) | !nzchar(lowered)] <- FALSE
+  out
+}
 
-  preferred_columns <- c(
-    PUBLIC_COMPOUND_METADATA_KEY,
-    COMPOUND_METADATA_KEY,
-    "Pubchem.CID",
-    "InChIKey",
-    "SMILES",
-    "Molecule.Name",
-    "In.JUMP.CP"
-  )
-  ordered_columns <- c(
-    preferred_columns[preferred_columns %in% colnames(public_frame)],
-    setdiff(colnames(public_frame), preferred_columns)
-  )
-  public_frame[, ordered_columns, drop = FALSE]
+as_integer_or_na <- function(values) {
+  suppressWarnings(as.integer(as.character(values)))
 }
 
 build_sample_ids <- function(frame) {
-  paste(
-    frame$Metadata_Plate,
-    frame$Metadata_Well,
-    sep = "."
-  )
-}
-
-build_raw_sample_ids <- function(frame) {
-  paste(
-    frame$plate,
-    frame$well,
-    sep = "."
-  )
+  paste(frame$Metadata_Plate, frame$Metadata_Well, sep = ".")
 }
 
 validate_required_columns <- function(columns, required_columns, label) {
@@ -129,308 +99,290 @@ validate_required_columns <- function(columns, required_columns, label) {
   }
 }
 
-fill_embedding_matrix <- function(
-  raw_profile_paths,
-  sample_index,
-  sample_id,
-  embedding_column,
-  embedding_length
-) {
-  raw_profile_columns <- c(RAW_PROFILE_IDENTIFIER_COLUMNS, embedding_column)
-  embedding_matrix <- matrix(
-    NA_real_,
-    nrow = embedding_length,
-    ncol = length(sample_id)
-  )
-  filled <- logical(length(sample_id))
+parquet_column_names <- function(path) {
+  names(arrow::open_dataset(path))
+}
 
-  for (profile_index in seq_along(raw_profile_paths)) {
-    profile_path <- raw_profile_paths[[profile_index]]
-    profile_frame <- arrow::read_parquet(
-      profile_path,
-      col_select = tidyselect::all_of(raw_profile_columns)
-    ) |>
-      as.data.frame()
-    profile_sample_id <- build_raw_sample_ids(profile_frame)
-    match_idx <- unname(sample_index[profile_sample_id])
-    keep <- !is.na(match_idx)
-    if (!any(keep)) {
+read_parquet_columns <- function(path, columns) {
+  arrow::read_parquet(path, col_select = columns) |>
+    as.data.frame(stringsAsFactors = FALSE)
+}
+
+build_public_drug_metadata <- function(compound_metadata) {
+  validate_required_columns(
+    names(compound_metadata),
+    c("Metadata_JCP2022", "Metadata_InChIKey"),
+    "compound_metadata.tsv"
+  )
+
+  jump_ids <- as.character(compound_metadata$Metadata_JCP2022)
+  if (any(is.na(jump_ids) | !nzchar(trimws(jump_ids)))) {
+    stopf("CPG0016 Metadata_JCP2022 values must be non-missing")
+  }
+  if (anyDuplicated(jump_ids) > 0L) {
+    stopf("CPG0016 Metadata_JCP2022 values must be unique")
+  }
+
+  pubchem_cid <- as_integer_or_na(compound_metadata$AnnotationDB_CID)
+  public <- data.frame(
+    JUMP.CP.ID = jump_ids,
+    Pubchem.CID = pubchem_cid,
+    InChIKey = as.character(compound_metadata$Metadata_InChIKey),
+    JUMP.CP.SMILES = as.character(compound_metadata$Metadata_SMILES),
+    In.AnnotationDB = as_logical_flag(compound_metadata$In_AnnotationDB) |
+      !is.na(pubchem_cid),
+    AnnotationDB.Name = as.character(compound_metadata$AnnotationDB_Name),
+    AnnotationDB.SMILES = as.character(compound_metadata$AnnotationDB_SMILES),
+    Perturbation.Type = as.character(compound_metadata$Metadata_pert_type),
+    Control.Name = as.character(compound_metadata$Metadata_Control_Name),
+    JUMP.CP.Compound.Source.Count = as_integer_or_na(
+      compound_metadata$Metadata_Compound_Source_Count
+    ),
+    JUMP.CP.Compound.Sources = as.character(
+      compound_metadata$Metadata_Compound_Sources
+    ),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+  row.names(public) <- public$JUMP.CP.ID
+  public
+}
+
+build_public_coldata <- function(well_metadata, drug_metadata) {
+  sample_id <- build_sample_ids(well_metadata)
+  public <- data.frame(
+    Sample.ID = sample_id,
+    Source = as.character(well_metadata$Metadata_Source),
+    Batch = as.character(well_metadata$Metadata_Batch),
+    Plate = as.character(well_metadata$Metadata_Plate),
+    Well = as.character(well_metadata$Metadata_Well),
+    JUMP.CP.ID = as.character(well_metadata$Metadata_JCP2022),
+    InChIKey = as.character(well_metadata$Metadata_InChIKey),
+    Perturbation.Type = as.character(well_metadata$Metadata_pert_type),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+
+  match_idx <- match(public$JUMP.CP.ID, drug_metadata$JUMP.CP.ID)
+  public$Pubchem.CID <- drug_metadata$Pubchem.CID[match_idx]
+  public$InChIKey <- first_non_missing(
+    drug_metadata$InChIKey[match_idx],
+    public$InChIKey
+  )
+  public$JUMP.CP.SMILES <- drug_metadata$JUMP.CP.SMILES[match_idx]
+  public$In.AnnotationDB <- drug_metadata$In.AnnotationDB[match_idx]
+  public$AnnotationDB.Name <- drug_metadata$AnnotationDB.Name[match_idx]
+  public$AnnotationDB.SMILES <- drug_metadata$AnnotationDB.SMILES[match_idx]
+
+  ordered_columns <- c(
+    "Sample.ID",
+    "JUMP.CP.ID",
+    "Pubchem.CID",
+    "InChIKey",
+    "JUMP.CP.SMILES",
+    "In.AnnotationDB",
+    "AnnotationDB.Name",
+    "AnnotationDB.SMILES"
+  )
+  public[,
+    c(ordered_columns, setdiff(names(public), ordered_columns)),
+    drop = FALSE
+  ]
+}
+
+rbind_fill <- function(frames) {
+  all_columns <- unique(unlist(lapply(frames, names), use.names = FALSE))
+  aligned <- lapply(frames, function(frame) {
+    missing <- setdiff(all_columns, names(frame))
+    for (column in missing) {
+      frame[[column]] <- NA
+    }
+    frame[, all_columns, drop = FALSE]
+  })
+  do.call(rbind, aligned)
+}
+
+is_list_feature <- function(values) {
+  is.list(values) && !is.data.frame(values)
+}
+
+build_assay_from_profile <- function(
+  profile_path,
+  metadata_columns,
+  sample_id,
+  assay_name,
+  profile_model
+) {
+  feature_columns <- setdiff(
+    parquet_column_names(profile_path),
+    metadata_columns
+  )
+  if (!length(feature_columns)) {
+    stopf("No assay feature columns found for %s", assay_name)
+  }
+
+  matrices <- list()
+  row_data <- list()
+
+  for (feature_column in feature_columns) {
+    feature_frame <- read_parquet_columns(profile_path, feature_column)
+    values <- feature_frame[[feature_column]]
+    feature_frame[[feature_column]] <- NULL
+
+    if (is_list_feature(values)) {
+      widths <- unique(vapply(values, length, integer(1)))
+      if (length(widths) != 1L) {
+        stopf(
+          "Feature column %s has inconsistent vector lengths",
+          feature_column
+        )
+      }
+      n_values <- length(values)
+      flat_values <- unlist(values, use.names = FALSE)
+      rm(values, feature_frame)
+      gc()
+      mat <- matrix(
+        as.numeric(flat_values),
+        nrow = widths[[1L]],
+        ncol = n_values,
+        byrow = FALSE
+      )
+      rm(flat_values)
+      row_names <- sprintf("%s_%04d", feature_column, seq_len(nrow(mat)))
+    } else if (is.numeric(values) || is.integer(values) || is.logical(values)) {
+      numeric_values <- as.numeric(values)
+      rm(values, feature_frame)
+      mat <- matrix(numeric_values, nrow = 1L)
+      rm(numeric_values)
+      row_names <- feature_column
+    } else {
+      rm(values, feature_frame)
       next
     }
-    if (any(filled[match_idx[keep]])) {
-      stopf(
-        "Duplicate sample_id values were encountered while scanning raw profiles: %s",
-        profile_path
-      )
-    }
 
-    local_embeddings <- profile_frame[[embedding_column]][keep]
-    local_lengths <- unique(vapply(local_embeddings, length, integer(1)))
-    if (length(local_lengths) != 1L || local_lengths != embedding_length) {
-      stopf(
-        paste(
-          "Raw profile %s does not match the expected %s embedding length of %d."
-        ),
-        profile_path,
-        embedding_column,
-        embedding_length
-      )
-    }
-
-    local_matrix <- matrix(
-      as.numeric(unlist(local_embeddings, use.names = FALSE)),
-      nrow = embedding_length,
-      ncol = sum(keep),
-      byrow = FALSE
-    )
-    embedding_matrix[, match_idx[keep]] <- local_matrix
-    filled[match_idx[keep]] <- TRUE
-
-    if ((profile_index %% 100L) == 0L) {
-      message(sprintf(
-        "[build_mae] filled %d/%d raw profile files",
-        profile_index,
-        length(raw_profile_paths)
-      ))
-      gc()
-    }
-  }
-
-  if (!all(filled)) {
-    stopf(
-      "Embedding matrix is missing %d sample columns after scanning raw profiles",
-      sum(!filled)
+    rownames(mat) <- row_names
+    colnames(mat) <- sample_id
+    matrices[[feature_column]] <- mat
+    row_data[[feature_column]] <- data.frame(
+      Feature.ID = row_names,
+      Feature.Source = feature_column,
+      Feature.Index = seq_along(row_names),
+      Profile.Model = profile_model,
+      Assay.Name = assay_name,
+      stringsAsFactors = FALSE,
+      check.names = FALSE
     )
   }
 
-  embedding_matrix
-}
+  if (!length(matrices)) {
+    stopf("No numeric or vector assay features found for %s", assay_name)
+  }
 
-profile_model <- snakemake@params[["profile_model"]]
-model_stem <- snakemake@params[["model_stem"]]
+  assay_matrix <- do.call(rbind, matrices)
+  row_data <- do.call(rbind, row_data)
+  row.names(row_data) <- row_data$Feature.ID
 
-if (!identical(profile_model, PROFILE_MODEL_CPCNN)) {
-  stopf(
-    paste(
-      "Single-RDS MAE export is only supported for %s.",
-      "Current dataset.profile_model is '%s'.",
-      "EfficientNet requires backed storage."
-    ),
-    PROFILE_MODEL_CPCNN,
-    profile_model
+  SummarizedExperiment::SummarizedExperiment(
+    assays = S4Vectors::SimpleList(values = assay_matrix),
+    rowData = S4Vectors::DataFrame(row_data, row.names = row.names(row_data)),
+    colData = S4Vectors::DataFrame(row.names = colnames(assay_matrix))
   )
 }
 
-well_profiles_path <- snakemake@input[["well_profiles"]]
+well_profile_paths <- unname(snakemake@input[["well_profiles"]])
 compound_metadata_path <- snakemake@input[["compound_metadata"]]
-manifest_path <- snakemake@input[["manifest_tsv"]]
-manifest_summary_path <- snakemake@input[["summary_tsv"]]
-raw_profile_paths <- unname(snakemake@input[["raw_profiles"]])
 config_path <- snakemake@input[["configfile"]]
 output_path <- snakemake@output[["mae_rds"]]
 
-dataset <- arrow::open_dataset(well_profiles_path, format = "parquet")
-all_columns <- names(dataset)
-embedding_columns <- all_columns[endsWith(all_columns, "_emb")]
+dataset_id <- snakemake@params[["dataset_id"]]
+dataset_version <- snakemake@params[["dataset_version"]]
+profile_models <- split_param(snakemake@params[["profile_models"]])
+assay_names <- split_param(snakemake@params[["assay_names"]])
 
-validate_required_columns(
-  all_columns,
-  WELL_METADATA_COLUMNS,
-  "Well profile parquet"
-)
-if (!identical(embedding_columns, EMBEDDING_COLUMN_CPCNN)) {
-  stopf(
-    paste(
-      "Expected exactly one embedding column named '%s' in the CPCNN parquet,",
-      "but found: %s"
-    ),
-    EMBEDDING_COLUMN_CPCNN,
-    paste(embedding_columns, collapse = ", ")
-  )
-}
-
-message(sprintf(
-  "[build_mae] reading well metadata from %s",
-  well_profiles_path
-))
-well_metadata <- arrow::read_parquet(
-  well_profiles_path,
-  col_select = tidyselect::all_of(WELL_METADATA_COLUMNS)
-) |>
-  as.data.frame()
-
-sample_id <- build_sample_ids(well_metadata)
-if (anyDuplicated(sample_id) > 0L) {
-  stopf("Duplicate sample_id values detected in the curated well parquet")
+if (length(well_profile_paths) != length(assay_names)) {
+  stopf("well_profiles and assay_names lengths do not match")
 }
 
 compound_metadata <- read_tsv(compound_metadata_path)
-validate_required_columns(
-  names(compound_metadata),
-  c(COMPOUND_METADATA_KEY, "Metadata_InChIKey"),
-  "compound_metadata.tsv"
-)
-if ("Metadata_Control_Name" %in% names(compound_metadata)) {
-  compound_metadata$Metadata_Control_Name <-
-    normalize_blank_to_na(compound_metadata$Metadata_Control_Name)
-}
-if (
-  "AnnotationDB_Has_Match" %in%
-    names(compound_metadata) &&
-    !("In_AnnotationDB" %in% names(compound_metadata))
-) {
-  names(compound_metadata)[
-    names(compound_metadata) == "AnnotationDB_Has_Match"
-  ] <- "In_AnnotationDB"
-}
-if ("In_AnnotationDB" %in% names(compound_metadata)) {
-  compound_metadata$In_AnnotationDB <-
-    tolower(as.character(compound_metadata$In_AnnotationDB)) == "true"
-}
-if (anyDuplicated(compound_metadata[[COMPOUND_METADATA_KEY]]) > 0L) {
+if (anyDuplicated(compound_metadata$Metadata_JCP2022) > 0L) {
   stopf("compound_metadata.tsv contains duplicate Metadata_JCP2022 rows")
 }
+drug_metadata <- build_public_drug_metadata(compound_metadata)
 
-compound_rows <- well_metadata$Metadata_Is_Compound %in% TRUE
-missing_compound_keys <- compound_rows &
-  (is.na(well_metadata$Metadata_InChIKey) |
-    !nzchar(well_metadata$Metadata_InChIKey))
-if (any(missing_compound_keys)) {
-  stopf(
-    "Well metadata contains %d compound rows without Metadata_InChIKey",
-    sum(missing_compound_keys)
-  )
-}
-compound_key_match <- match(
-  unique(well_metadata$Metadata_JCP2022[compound_rows]),
-  compound_metadata[[COMPOUND_METADATA_KEY]]
-)
-if (any(is.na(compound_key_match))) {
-  stopf(
-    paste(
-      "Compound metadata join key validation failed for %d unique",
-      "Metadata_JCP2022 values"
+experiments <- list()
+coldata_frames <- list()
+sample_map_frames <- list()
+
+for (idx in seq_along(well_profile_paths)) {
+  profile_path <- well_profile_paths[[idx]]
+  assay_name <- assay_names[[idx]]
+  profile_model <- profile_models[[idx]]
+
+  cat(sprintf("[build_mae] reading %s\n", profile_path))
+  profile_columns <- parquet_column_names(profile_path)
+  metadata_columns <- grep("^Metadata_", profile_columns, value = TRUE)
+  frame <- read_parquet_columns(profile_path, metadata_columns)
+
+  validate_required_columns(
+    names(frame),
+    c(
+      "Metadata_Source",
+      "Metadata_Batch",
+      "Metadata_Plate",
+      "Metadata_Well",
+      "Metadata_JCP2022",
+      "Metadata_InChIKey"
     ),
-    sum(is.na(compound_key_match))
+    profile_path
   )
-}
 
-col_data_frame <- well_metadata[, COL_DATA_COLUMNS, drop = FALSE]
-row.names(col_data_frame) <- sample_id
-col_data <- S4Vectors::DataFrame(col_data_frame, row.names = sample_id)
+  sample_id <- build_sample_ids(frame)
+  if (anyDuplicated(sample_id) > 0L) {
+    stopf("Duplicate Sample.ID values detected in %s", profile_path)
+  }
 
-compound_metadata_row_names <- compound_metadata[[COMPOUND_METADATA_KEY]]
-public_compound_metadata <- build_public_compound_metadata(compound_metadata)
-row.names(public_compound_metadata) <- compound_metadata_row_names
-compound_metadata_df <- S4Vectors::DataFrame(
-  public_compound_metadata,
-  row.names = compound_metadata_row_names
-)
-if ("Metadata_Compound_Sources" %in% names(compound_metadata_df)) {
-  compound_metadata_df$Metadata_Compound_Sources <-
-    split_pipe_strings(as.character(
-      compound_metadata_df$Metadata_Compound_Sources
-    ))
-}
-
-message(sprintf(
-  "[build_mae] deriving embedding length from %s",
-  raw_profile_paths[[1L]]
-))
-first_raw_profile <- arrow::read_parquet(
-  raw_profile_paths[[1L]],
-  col_select = tidyselect::all_of(
-    c(RAW_PROFILE_IDENTIFIER_COLUMNS, EMBEDDING_COLUMN_CPCNN)
+  coldata_frames[[assay_name]] <- build_public_coldata(frame, drug_metadata)
+  experiments[[assay_name]] <- build_assay_from_profile(
+    profile_path = profile_path,
+    metadata_columns = metadata_columns,
+    sample_id = sample_id,
+    assay_name = assay_name,
+    profile_model = profile_model
   )
-) |>
-  as.data.frame()
-embedding_length <- unique(
-  vapply(first_raw_profile[[EMBEDDING_COLUMN_CPCNN]], length, integer(1))
-)
-if (length(embedding_length) != 1L) {
-  stopf("Embedding vectors do not have a constant length across all wells")
-}
-
-sample_index <- seq_along(sample_id)
-names(sample_index) <- sample_id
-
-message(sprintf(
-  "[build_mae] constructing %s assay from %d raw profile files",
-  EMBEDDING_COLUMN_CPCNN,
-  length(raw_profile_paths)
-))
-gc()
-embedding_matrix <- fill_embedding_matrix(
-  raw_profile_paths = raw_profile_paths,
-  sample_index = sample_index,
-  sample_id = sample_id,
-  embedding_column = EMBEDDING_COLUMN_CPCNN,
-  embedding_length = embedding_length
-)
-colnames(embedding_matrix) <- sample_id
-
-if (ncol(embedding_matrix) != nrow(col_data)) {
-  stopf(
-    "Assay columns (%d) do not match colData rows (%d)",
-    ncol(embedding_matrix),
-    nrow(col_data)
+  sample_map_frames[[assay_name]] <- data.frame(
+    assay = assay_name,
+    primary = sample_id,
+    colname = sample_id,
+    stringsAsFactors = FALSE
   )
+  rm(frame)
+  gc()
 }
 
-row_data <- S4Vectors::DataFrame(
-  feature_index = seq_len(embedding_length),
-  embedding_name = EMBEDDING_COLUMN_CPCNN,
-  profile_model = profile_model
-)
-experiment_col_data <- S4Vectors::DataFrame(row.names = sample_id)
+col_data <- rbind_fill(unname(coldata_frames))
+col_data <- col_data[!duplicated(col_data$Sample.ID), , drop = FALSE]
+row.names(col_data) <- col_data$Sample.ID
 
-all_emb_experiment <- SummarizedExperiment::SummarizedExperiment(
-  assays = S4Vectors::SimpleList(embedding = embedding_matrix),
-  rowData = row_data,
-  colData = experiment_col_data
-)
-
-sample_map <- S4Vectors::DataFrame(
-  assay = factor(
-    rep(EMBEDDING_COLUMN_CPCNN, length(sample_id)),
-    levels = EMBEDDING_COLUMN_CPCNN
-  ),
-  primary = sample_id,
-  colname = sample_id
-)
+sample_map <- do.call(rbind, sample_map_frames)
 
 mae <- MultiAssayExperiment::MultiAssayExperiment(
-  experiments = MultiAssayExperiment::ExperimentList(
-    setNames(list(all_emb_experiment), EMBEDDING_COLUMN_CPCNN)
-  ),
-  colData = col_data,
-  sampleMap = sample_map
+  experiments = MultiAssayExperiment::ExperimentList(experiments),
+  colData = S4Vectors::DataFrame(col_data, row.names = row.names(col_data)),
+  sampleMap = S4Vectors::DataFrame(sample_map)
 )
 
-if (!identical(rownames(colData(mae)), sample_id)) {
-  stopf("MultiAssayExperiment colData rownames do not match sample_id ordering")
-}
-if (!identical(colnames(all_emb_experiment), sample_id)) {
-  stopf("Assay column names do not match sample_id ordering")
-}
-
 metadata(mae) <- list(
-  dataset_name = DATASET_NAME,
-  dataset_version = DATASET_VERSION,
-  profile_model = profile_model,
-  model_stem = model_stem,
-  embedding_columns = embedding_columns,
-  embedding_lengths = stats::setNames(
-    as.integer(embedding_length),
-    embedding_columns
+  Pipeline = list(
+    ID = dataset_id,
+    Version = dataset_version,
+    Config = yaml::read_yaml(config_path, eval.expr = FALSE)
   ),
-  pipeline_config = yaml::read_yaml(config_path, eval.expr = FALSE),
-  manifest = read_tsv(manifest_path),
-  manifest_summary = read_tsv(manifest_summary_path),
-  compound_metadata_key = PUBLIC_COMPOUND_METADATA_KEY,
-  compound_metadata = compound_metadata_df
+  Drug.Metadata = S4Vectors::DataFrame(
+    drug_metadata,
+    row.names = drug_metadata$JUMP.CP.ID
+  )
 )
 
 dir.create(dirname(output_path), recursive = TRUE, showWarnings = FALSE)
-message(sprintf("[build_mae] writing MAE to %s", output_path))
+cat(sprintf("[build_mae] writing MAE to %s\n", output_path))
 saveRDS(mae, file = output_path)

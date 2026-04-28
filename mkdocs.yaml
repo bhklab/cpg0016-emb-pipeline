@@ -1,0 +1,14 @@
+site_name: CPG0016 Embedding Pipeline
+repo_name: cpg0016-emb-pipeline
+site_description: Documentation for the CPG0016 embedding pipeline
+site_author: Michael Tran <michaelcao-anh.tran@uhn.ca>
+docs_dir: docs
+site_dir: site
+nav:
+  - Home: README.md
+  - colData: colData.md
+  - MAE: mae.md
+  - Developer Notes: devnotes.md
+theme: readthedocs
+plugins:
+  - search

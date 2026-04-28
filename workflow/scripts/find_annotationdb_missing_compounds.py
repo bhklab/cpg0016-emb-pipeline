@@ -5,9 +5,9 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 
 
-DEFAULT_INPUT = Path("data/metadata/compound_master.tsv")
-DEFAULT_OUTPUT = Path("data/metadata/missing_annotationdb.txt")
-DEFAULT_ANNOTATIONDB_URL = "https://v2annotationdb.bhklab.ca/compound/all"
+DEFAULT_INPUT = Path("data/procdata/metadata/drug_metadata_raw.tsv")
+DEFAULT_OUTPUT = Path("data/procdata/metadata/missing_annotationdb.txt")
+DEFAULT_ANNOTATIONDB_API = "https://v2annotationdb.bhklab.ca"
 INCHIKEY_COLUMN = "Metadata_InChIKey"
 
 
@@ -31,9 +31,9 @@ def parse_args():
         help="Output text file with one missing InChIKey per line.",
     )
     parser.add_argument(
-        "--annotationdb-url",
-        default=DEFAULT_ANNOTATIONDB_URL,
-        help="AnnotationDB compound index endpoint.",
+        "--annotationdb-api",
+        default=DEFAULT_ANNOTATIONDB_API,
+        help="AnnotationDB API base URL.",
     )
     parser.add_argument(
         "--timeout",
@@ -103,8 +103,9 @@ def main():
     args = parse_args()
 
     rows = read_jump_rows(args.input)
+    annotationdb_endpoint = f"{args.annotationdb_api.rstrip('/')}/compound/all"
     available_inchikeys = fetch_annotationdb_inchikeys(
-        url=args.annotationdb_url,
+        url=annotationdb_endpoint,
         timeout=args.timeout,
     )
     inchikeys_missing_from_annotationdb = missing_inchikeys(

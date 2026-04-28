@@ -1,23 +1,38 @@
+# Pipeline directory layout
 paths:
   raw_dir: data/rawdata
   proc_dir: data/procdata
-  metadata_dir: data/metadata
+  results_dir: data/results
 
 dataset:
+  # Stable identifier used in final result filenames
+  id: cpg0016_emb
+  version: v2.0.0
+  # Public S3 bucket containing Cell Painting Gallery source data
   bucket: cellpainting-gallery
+  # Top level bucket prefix for the CPG0016 JUMP dataset
   prefix: cpg0016-jump
-  # options: cpcnn_zenodo_7114558, efficientnet_v2_imagenet21k_s_feature_vector_2_0260bc96
-  profile_model: cpcnn_zenodo_7114558
+
+sources:
+  # Base URL for JUMP source metadata files
+  metadata_base_url: https://raw.githubusercontent.com/jump-cellpainting/datasets/main/metadata
+
+# Base AnnotationDB API URL
+# The workflow appends /compound/all
+annotationdb_api: https://v2annotationdb.bhklab.ca
+
+# Profile model identifiers to process
+# cellprofiler and cpdistiller are model families but are not implemented yet
+models:
+  - cpcnn_zenodo_7114558
+  - efficientnet_v2_imagenet21k_s_feature_vector_2_0260bc96
+  # - cellprofiler
+  # - cpdistiller_mesmer_s41467_025_62193_z
 
 selection:
-  # Curated drug-only subset.
+  # Curated drug only subset
   mode: source_subset
-
-  # source_4 is ORF-heavy and source_13 is CRISPR-heavy, so they are excluded
-  # from the default drug-only subset.
-  # source_15 does not include published workspace_dl profile outputs.
-  # The efficientnet model is also missing 4 COMPOUND plates that exist for CPCNN:
-  # 1 in source_6 and 3 in source_11.
+  # CPG source folders to include
   sources:
     - source_1
     - source_2
@@ -29,20 +44,14 @@ selection:
     - source_9
     - source_10
     - source_11
-  # Keep only the main compound-screening plates. This excludes TARGET1/TARGET2
-  # benchmark panels plus ORF/CRISPR/control-only plate classes.
+  # Plate types to keep from the selected sources
   include_plate_types:
     - COMPOUND
-  # Set to null to include every plate from the selected sources.
+  # Set to null to include every matching plate
   plate_limit_per_source: null
-  # Keep all small-molecule wells in one table, including DMSO and positive controls.
-  # Downstream modeling should keep treatment wells with Metadata_pert_type: treatment
-  # and drop controls with other Metadata_pert_type values.
+  # Use all compound wells including treatment wells and controls
   output_row_filter: all_compound_wells
 
 download:
+  # Redownload files even when a nonempty local copy exists
   overwrite: true
-
-metadata:
-  base_url: https://raw.githubusercontent.com/jump-cellpainting/datasets/main/metadata
-  annotationdb_url: https://v2annotationdb.bhklab.ca/compound/all

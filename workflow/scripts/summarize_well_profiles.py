@@ -6,7 +6,7 @@ import polars as pl
 
 
 DEFAULT_INPUT_DIR = Path("data/procdata")
-DEFAULT_OUTPUT_ROOT = Path("data/metadata")
+DEFAULT_OUTPUT_ROOT = Path("data/procdata/metadata")
 IMPORTANT_NULL_COLUMNS = [
     "Metadata_JCP2022",
     "Metadata_PlateType",
@@ -42,7 +42,7 @@ def parse_args():
         type=Path,
         help=(
             "Directory where summary TSVs will be written. Defaults to "
-            "data/metadata/<input_stem>_summary/."
+            "data/procdata/metadata/<input_stem>_summary/."
         ),
     )
     return parser.parse_args()
@@ -136,20 +136,17 @@ def collect_input_summary(lazy_frame, input_path):
 
     embedding_width = 0
     if embedding_columns:
-        lengths = (
-            cast(
-                pl.DataFrame,
-                pl.scan_parquet(input_path)
-                .select(
-                    [
-                        pl.col(column).list.len().first().alias(column)
-                        for column in embedding_columns
-                    ]
-                )
-                .collect(),
+        lengths = cast(
+            pl.DataFrame,
+            pl.scan_parquet(input_path)
+            .select(
+                [
+                    pl.col(column).list.len().first().alias(column)
+                    for column in embedding_columns
+                ]
             )
-            .row(0, named=True)
-        )
+            .collect(),
+        ).row(0, named=True)
         embedding_width = sum(int(length) for length in lengths.values())
 
     return metric_frame(
@@ -169,41 +166,37 @@ def collect_overall_metrics(lazy_frame):
     control_compound = control_compound_filter()
     noncompound = noncompound_filter()
 
-    metrics = (
-        cast(
-            pl.DataFrame,
-            lazy_frame.select(
-                [
-                    pl.len().alias("rows"),
-                    pl.struct(WELL_KEY_COLUMNS).n_unique().alias("unique_well_keys"),
-                    (pl.len() - pl.struct(WELL_KEY_COLUMNS).n_unique()).alias(
-                        "duplicate_well_keys"
-                    ),
-                    pl.col("Metadata_Source").n_unique().alias("sources"),
-                    pl.col("Metadata_Batch").n_unique().alias("batches"),
-                    pl.col("Metadata_Plate").n_unique().alias("plates"),
-                    pl.col("Metadata_JCP2022").n_unique().alias("jcp_ids_total"),
-                    treatment.sum().alias("treatment_rows"),
-                    pl.col("Metadata_JCP2022")
-                    .filter(treatment)
-                    .n_unique()
-                    .alias("treatment_drugs"),
-                    control_compound.sum().alias("control_compound_rows"),
-                    pl.col("Metadata_JCP2022")
-                    .filter(control_compound)
-                    .n_unique()
-                    .alias("control_compounds"),
-                    noncompound.sum().alias("noncompound_rows"),
-                    pl.col("Metadata_JCP2022")
-                    .filter(noncompound)
-                    .n_unique()
-                    .alias("noncompound_jcp_ids"),
-                ]
-            )
-            .collect(),
-        )
-        .row(0, named=True)
-    )
+    metrics = cast(
+        pl.DataFrame,
+        lazy_frame.select(
+            [
+                pl.len().alias("rows"),
+                pl.struct(WELL_KEY_COLUMNS).n_unique().alias("unique_well_keys"),
+                (pl.len() - pl.struct(WELL_KEY_COLUMNS).n_unique()).alias(
+                    "duplicate_well_keys"
+                ),
+                pl.col("Metadata_Source").n_unique().alias("sources"),
+                pl.col("Metadata_Batch").n_unique().alias("batches"),
+                pl.col("Metadata_Plate").n_unique().alias("plates"),
+                pl.col("Metadata_JCP2022").n_unique().alias("jcp_ids_total"),
+                treatment.sum().alias("treatment_rows"),
+                pl.col("Metadata_JCP2022")
+                .filter(treatment)
+                .n_unique()
+                .alias("treatment_drugs"),
+                control_compound.sum().alias("control_compound_rows"),
+                pl.col("Metadata_JCP2022")
+                .filter(control_compound)
+                .n_unique()
+                .alias("control_compounds"),
+                noncompound.sum().alias("noncompound_rows"),
+                pl.col("Metadata_JCP2022")
+                .filter(noncompound)
+                .n_unique()
+                .alias("noncompound_jcp_ids"),
+            ]
+        ).collect(),
+    ).row(0, named=True)
 
     return metric_frame(metrics)
 
@@ -213,33 +206,29 @@ def collect_category_counts(lazy_frame):
     control_compound = control_compound_filter()
     noncompound = noncompound_filter()
 
-    counts = (
-        cast(
-            pl.DataFrame,
-            lazy_frame.select(
-                [
-                    pl.len().alias("rows_total"),
-                    treatment.sum().alias("treatment_compound_rows"),
-                    pl.col("Metadata_JCP2022")
-                    .filter(treatment)
-                    .n_unique()
-                    .alias("treatment_compound_ids"),
-                    control_compound.sum().alias("control_compound_rows"),
-                    pl.col("Metadata_JCP2022")
-                    .filter(control_compound)
-                    .n_unique()
-                    .alias("control_compound_ids"),
-                    noncompound.sum().alias("noncompound_rows"),
-                    pl.col("Metadata_JCP2022")
-                    .filter(noncompound)
-                    .n_unique()
-                    .alias("noncompound_ids"),
-                ]
-            )
-            .collect(),
-        )
-        .row(0, named=True)
-    )
+    counts = cast(
+        pl.DataFrame,
+        lazy_frame.select(
+            [
+                pl.len().alias("rows_total"),
+                treatment.sum().alias("treatment_compound_rows"),
+                pl.col("Metadata_JCP2022")
+                .filter(treatment)
+                .n_unique()
+                .alias("treatment_compound_ids"),
+                control_compound.sum().alias("control_compound_rows"),
+                pl.col("Metadata_JCP2022")
+                .filter(control_compound)
+                .n_unique()
+                .alias("control_compound_ids"),
+                noncompound.sum().alias("noncompound_rows"),
+                pl.col("Metadata_JCP2022")
+                .filter(noncompound)
+                .n_unique()
+                .alias("noncompound_ids"),
+            ]
+        ).collect(),
+    ).row(0, named=True)
 
     rows_total = int(counts["rows_total"])
     return pl.DataFrame(
@@ -274,29 +263,27 @@ def collect_perturbation_counts(lazy_frame):
         lazy_frame.select(pl.len().alias("rows_total")).collect(),
     ).item()
 
-    return (
-        cast(
-            pl.DataFrame,
-            lazy_frame.group_by("Metadata_pert_type")
-            .agg(
-                [
-                    pl.len().alias("rows"),
-                    pl.col("Metadata_JCP2022").n_unique().alias("unique_jcp_ids"),
-                    pl.col("Metadata_Is_Compound").sum().alias("compound_rows"),
-                    (~pl.col("Metadata_Is_Compound")).sum().alias("noncompound_rows"),
-                ]
-            )
-            .with_columns(
-                [
-                    pl.col("Metadata_pert_type")
-                    .fill_null("null")
-                    .alias("Metadata_pert_type"),
-                    (pl.col("rows") / rows_total * 100).round(2).alias("row_pct"),
-                ]
-            )
-            .sort("rows", descending=True)
-            .collect(),
+    return cast(
+        pl.DataFrame,
+        lazy_frame.group_by("Metadata_pert_type")
+        .agg(
+            [
+                pl.len().alias("rows"),
+                pl.col("Metadata_JCP2022").n_unique().alias("unique_jcp_ids"),
+                pl.col("Metadata_Is_Compound").sum().alias("compound_rows"),
+                (~pl.col("Metadata_Is_Compound")).sum().alias("noncompound_rows"),
+            ]
         )
+        .with_columns(
+            [
+                pl.col("Metadata_pert_type")
+                .fill_null("null")
+                .alias("Metadata_pert_type"),
+                (pl.col("rows") / rows_total * 100).round(2).alias("row_pct"),
+            ]
+        )
+        .sort("rows", descending=True)
+        .collect(),
     )
 
 
@@ -306,21 +293,19 @@ def collect_plate_type_counts(lazy_frame):
         lazy_frame.select(pl.len().alias("rows_total")).collect(),
     ).item()
 
-    return (
-        cast(
-            pl.DataFrame,
-            lazy_frame.group_by("Metadata_PlateType")
-            .agg(
-                [
-                    pl.len().alias("rows"),
-                    pl.col("Metadata_Plate").n_unique().alias("plates"),
-                    pl.col("Metadata_Source").n_unique().alias("sources"),
-                ]
-            )
-            .with_columns((pl.col("rows") / rows_total * 100).round(2).alias("row_pct"))
-            .sort("rows", descending=True)
-            .collect(),
+    return cast(
+        pl.DataFrame,
+        lazy_frame.group_by("Metadata_PlateType")
+        .agg(
+            [
+                pl.len().alias("rows"),
+                pl.col("Metadata_Plate").n_unique().alias("plates"),
+                pl.col("Metadata_Source").n_unique().alias("sources"),
+            ]
         )
+        .with_columns((pl.col("rows") / rows_total * 100).round(2).alias("row_pct"))
+        .sort("rows", descending=True)
+        .collect(),
     )
 
 
@@ -329,18 +314,12 @@ def collect_null_counts(lazy_frame):
     available_columns = [
         column for column in IMPORTANT_NULL_COLUMNS if column in schema.names()
     ]
-    counts = (
-        cast(
-            pl.DataFrame,
-            lazy_frame.select(
-                [
-                    pl.col(column).null_count().alias(column)
-                    for column in available_columns
-                ]
-            ).collect(),
-        )
-        .row(0, named=True)
-    )
+    counts = cast(
+        pl.DataFrame,
+        lazy_frame.select(
+            [pl.col(column).null_count().alias(column) for column in available_columns]
+        ).collect(),
+    ).row(0, named=True)
     return metric_frame(counts)
 
 
@@ -349,66 +328,62 @@ def collect_source_summary(lazy_frame):
     control_compound = control_compound_filter()
     noncompound = noncompound_filter()
 
-    frame = (
-        cast(
-            pl.DataFrame,
-            lazy_frame.group_by("Metadata_Source")
-            .agg(
-                [
-                    pl.len().alias("rows"),
-                    pl.col("Metadata_Batch").n_unique().alias("batches"),
-                    pl.col("Metadata_Plate").n_unique().alias("plates"),
-                    treatment.sum().alias("treatment_rows"),
-                    pl.col("Metadata_JCP2022")
-                    .filter(treatment)
-                    .n_unique()
-                    .alias("treatment_drugs"),
-                    control_compound.sum().alias("control_compound_rows"),
-                    pl.col("Metadata_JCP2022")
-                    .filter(control_compound)
-                    .n_unique()
-                    .alias("control_compounds"),
-                    noncompound.sum().alias("noncompound_rows"),
-                    pl.col("Metadata_JCP2022")
-                    .filter(noncompound)
-                    .n_unique()
-                    .alias("noncompound_jcp_ids"),
-                ]
-            )
-            .with_columns(
-                [
-                    (pl.col("rows") / pl.col("plates")).round(2).alias("wells_per_plate"),
-                    (pl.col("treatment_rows") / pl.col("rows") * 100)
-                    .round(2)
-                    .alias("treatment_row_pct"),
-                    (pl.col("control_compound_rows") / pl.col("rows") * 100)
-                    .round(2)
-                    .alias("control_compound_row_pct"),
-                    (pl.col("noncompound_rows") / pl.col("rows") * 100)
-                    .round(2)
-                    .alias("noncompound_row_pct"),
-                ]
-            )
-            .collect(),
+    frame = cast(
+        pl.DataFrame,
+        lazy_frame.group_by("Metadata_Source")
+        .agg(
+            [
+                pl.len().alias("rows"),
+                pl.col("Metadata_Batch").n_unique().alias("batches"),
+                pl.col("Metadata_Plate").n_unique().alias("plates"),
+                treatment.sum().alias("treatment_rows"),
+                pl.col("Metadata_JCP2022")
+                .filter(treatment)
+                .n_unique()
+                .alias("treatment_drugs"),
+                control_compound.sum().alias("control_compound_rows"),
+                pl.col("Metadata_JCP2022")
+                .filter(control_compound)
+                .n_unique()
+                .alias("control_compounds"),
+                noncompound.sum().alias("noncompound_rows"),
+                pl.col("Metadata_JCP2022")
+                .filter(noncompound)
+                .n_unique()
+                .alias("noncompound_jcp_ids"),
+            ]
         )
+        .with_columns(
+            [
+                (pl.col("rows") / pl.col("plates")).round(2).alias("wells_per_plate"),
+                (pl.col("treatment_rows") / pl.col("rows") * 100)
+                .round(2)
+                .alias("treatment_row_pct"),
+                (pl.col("control_compound_rows") / pl.col("rows") * 100)
+                .round(2)
+                .alias("control_compound_row_pct"),
+                (pl.col("noncompound_rows") / pl.col("rows") * 100)
+                .round(2)
+                .alias("noncompound_row_pct"),
+            ]
+        )
+        .collect(),
     )
 
     return sort_by_source(frame)
 
 
 def collect_plate_type_by_source(lazy_frame):
-    frame = (
-        cast(
-            pl.DataFrame,
-            lazy_frame.group_by(["Metadata_Source", "Metadata_PlateType"])
-            .agg(
-                [
-                    pl.len().alias("rows"),
-                    pl.col("Metadata_Plate").n_unique().alias("plates"),
-                ]
-            )
-            .collect(),
+    frame = cast(
+        pl.DataFrame,
+        lazy_frame.group_by(["Metadata_Source", "Metadata_PlateType"])
+        .agg(
+            [
+                pl.len().alias("rows"),
+                pl.col("Metadata_Plate").n_unique().alias("plates"),
+            ]
         )
+        .collect(),
     )
     return sort_by_source(frame, extra_sort_columns=["rows"], extra_descending=[True])
 
@@ -416,31 +391,29 @@ def collect_plate_type_by_source(lazy_frame):
 def collect_treatment_replicates_by_source(lazy_frame):
     treatment = treatment_filter()
 
-    frame = (
-        cast(
-            pl.DataFrame,
-            lazy_frame.filter(treatment)
-            .group_by(["Metadata_Source", "Metadata_JCP2022"])
-            .agg(pl.len().alias("replicates"))
-            .group_by("Metadata_Source")
-            .agg(
-                [
-                    pl.len().alias("treatment_drugs"),
-                    pl.col("replicates").mean().round(3).alias("mean_replicates_per_drug"),
-                    pl.col("replicates").median().alias("median_replicates_per_drug"),
-                    pl.col("replicates").min().alias("min_replicates_per_drug"),
-                    pl.col("replicates").quantile(0.9).alias("p90_replicates_per_drug"),
-                    pl.col("replicates").max().alias("max_replicates_per_drug"),
-                    (pl.col("replicates") == 1).sum().alias("singleton_drugs"),
-                ]
-            )
-            .with_columns(
-                (pl.col("singleton_drugs") / pl.col("treatment_drugs") * 100)
-                .round(2)
-                .alias("singleton_drug_pct")
-            )
-            .collect(),
+    frame = cast(
+        pl.DataFrame,
+        lazy_frame.filter(treatment)
+        .group_by(["Metadata_Source", "Metadata_JCP2022"])
+        .agg(pl.len().alias("replicates"))
+        .group_by("Metadata_Source")
+        .agg(
+            [
+                pl.len().alias("treatment_drugs"),
+                pl.col("replicates").mean().round(3).alias("mean_replicates_per_drug"),
+                pl.col("replicates").median().alias("median_replicates_per_drug"),
+                pl.col("replicates").min().alias("min_replicates_per_drug"),
+                pl.col("replicates").quantile(0.9).alias("p90_replicates_per_drug"),
+                pl.col("replicates").max().alias("max_replicates_per_drug"),
+                (pl.col("replicates") == 1).sum().alias("singleton_drugs"),
+            ]
         )
+        .with_columns(
+            (pl.col("singleton_drugs") / pl.col("treatment_drugs") * 100)
+            .round(2)
+            .alias("singleton_drug_pct")
+        )
+        .collect(),
     )
 
     return sort_by_source(frame)
@@ -449,40 +422,37 @@ def collect_treatment_replicates_by_source(lazy_frame):
 def collect_treatment_replicates_overall(lazy_frame):
     treatment = treatment_filter()
 
-    metrics = (
-        cast(
-            pl.DataFrame,
-            lazy_frame.filter(treatment)
-            .group_by("Metadata_JCP2022")
-            .agg(
-                [
-                    pl.len().alias("total_replicates"),
-                    pl.col("Metadata_Source").n_unique().alias("sources_per_drug"),
-                ]
-            )
-            .select(
-                [
-                    pl.len().alias("treatment_drugs"),
-                    pl.col("total_replicates")
-                    .mean()
-                    .round(3)
-                    .alias("mean_total_replicates"),
-                    pl.col("total_replicates").median().alias("median_total_replicates"),
-                    pl.col("total_replicates").min().alias("min_total_replicates"),
-                    pl.col("total_replicates").quantile(0.9).alias("p90_total_replicates"),
-                    pl.col("total_replicates").max().alias("max_total_replicates"),
-                    pl.col("sources_per_drug")
-                    .mean()
-                    .round(3)
-                    .alias("mean_sources_per_drug"),
-                    pl.col("sources_per_drug").median().alias("median_sources_per_drug"),
-                    pl.col("sources_per_drug").max().alias("max_sources_per_drug"),
-                ]
-            )
-            .collect(),
+    metrics = cast(
+        pl.DataFrame,
+        lazy_frame.filter(treatment)
+        .group_by("Metadata_JCP2022")
+        .agg(
+            [
+                pl.len().alias("total_replicates"),
+                pl.col("Metadata_Source").n_unique().alias("sources_per_drug"),
+            ]
         )
-        .row(0, named=True)
-    )
+        .select(
+            [
+                pl.len().alias("treatment_drugs"),
+                pl.col("total_replicates")
+                .mean()
+                .round(3)
+                .alias("mean_total_replicates"),
+                pl.col("total_replicates").median().alias("median_total_replicates"),
+                pl.col("total_replicates").min().alias("min_total_replicates"),
+                pl.col("total_replicates").quantile(0.9).alias("p90_total_replicates"),
+                pl.col("total_replicates").max().alias("max_total_replicates"),
+                pl.col("sources_per_drug")
+                .mean()
+                .round(3)
+                .alias("mean_sources_per_drug"),
+                pl.col("sources_per_drug").median().alias("median_sources_per_drug"),
+                pl.col("sources_per_drug").max().alias("max_sources_per_drug"),
+            ]
+        )
+        .collect(),
+    ).row(0, named=True)
 
     return metric_frame(metrics)
 
@@ -490,22 +460,20 @@ def collect_treatment_replicates_overall(lazy_frame):
 def collect_treatment_source_overlap(lazy_frame):
     treatment = treatment_filter()
 
-    return (
-        cast(
-            pl.DataFrame,
-            lazy_frame.filter(treatment)
-            .group_by("Metadata_JCP2022")
-            .agg(pl.col("Metadata_Source").n_unique().alias("sources_per_drug"))
-            .group_by("sources_per_drug")
-            .agg(pl.len().alias("treatment_drugs"))
-            .with_columns(
-                (pl.col("treatment_drugs") / pl.col("treatment_drugs").sum() * 100)
-                .round(2)
-                .alias("drug_pct")
-            )
-            .sort("sources_per_drug")
-            .collect(),
+    return cast(
+        pl.DataFrame,
+        lazy_frame.filter(treatment)
+        .group_by("Metadata_JCP2022")
+        .agg(pl.col("Metadata_Source").n_unique().alias("sources_per_drug"))
+        .group_by("sources_per_drug")
+        .agg(pl.len().alias("treatment_drugs"))
+        .with_columns(
+            (pl.col("treatment_drugs") / pl.col("treatment_drugs").sum() * 100)
+            .round(2)
+            .alias("drug_pct")
         )
+        .sort("sources_per_drug")
+        .collect(),
     )
 
 

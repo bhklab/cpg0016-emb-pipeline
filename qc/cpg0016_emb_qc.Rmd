@@ -1,0 +1,10 @@
+---
+title: "CPG0016 Embedding Pipeline QC"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+## Placeholder

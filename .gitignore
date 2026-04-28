@@ -10,6 +10,9 @@ wheels/
 !.pixi/config.toml
 .snakemake
 data/rawdata/**
+!data/rawdata/README.md
 data/procdata/**
-data/metadata/**
+!data/procdata/README.md
+data/results/**
+!data/results/README.md
 scratch/

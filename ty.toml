@@ -1,5 +1,16 @@
+[analysis]
+allowed-unresolved-imports = [
+    "snakemake",
+    "rdkit.Chem.rdchem",
+    "rdkit.Chem.rdMolDescriptors",
+]
+
+[environment]
+python = "./.pixi/envs/default"
+
 [[overrides]]
 include = ["Snakefile", "workflow/**/*.py"]
 
 [overrides.rules]
 unresolved-reference = "ignore"
+unresolved-attribute = "ignore"

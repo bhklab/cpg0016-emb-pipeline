@@ -33,7 +33,7 @@ def download_file(url, destination):
     tmp_path.replace(destination)
 
 
-base_url = snakemake.config["metadata"]["base_url"].rstrip("/")
+base_url = snakemake.config["sources"]["metadata_base_url"].rstrip("/")
 overwrite = parse_bool(snakemake.config["download"].get("overwrite", False))
 
 for output_name, output_path in snakemake.output.items():

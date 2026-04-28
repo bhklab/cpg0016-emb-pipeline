@@ -120,22 +120,19 @@ if not embedding_columns:
         "Profile parquet schema does not expose any embedding columns ending with '_emb'"
     )
 
-profile_model = snakemake.config["dataset"]["profile_model"].rstrip("/")
+profile_model = snakemake.params["profile_model"].rstrip("/")
 n_rows = cast(pl.DataFrame, raw_profiles.select(pl.len()).collect()).item()
-embedding_lengths = (
-    cast(
-        pl.DataFrame,
-        pl.scan_parquet(raw_profile_paths[0])
-        .select(
-            [
-                pl.col(column).list.len().first().alias(column)
-                for column in embedding_columns
-            ]
-        )
-        .collect(),
+embedding_lengths = cast(
+    pl.DataFrame,
+    pl.scan_parquet(raw_profile_paths[0])
+    .select(
+        [
+            pl.col(column).list.len().first().alias(column)
+            for column in embedding_columns
+        ]
     )
-    .to_dicts()[0]
-)
+    .collect(),
+).to_dicts()[0]
 embedding_width = sum(int(length) for length in embedding_lengths.values())
 estimated_embedding_bytes = n_rows * embedding_width * 4
 free_output_bytes = shutil.disk_usage(well_profiles_path.parent).free
@@ -241,26 +238,24 @@ compound_master = (
 
 compound_master_path = Path(snakemake.output.compound_master)
 compound_master_path.parent.mkdir(parents=True, exist_ok=True)
-compound_master_frame = (
-    cast(
-        pl.DataFrame,
-        compound_master.select(COMPOUND_MASTER_COLUMNS)
-        .with_columns(
-            [
-                pl.when(
-                    pl.col("Metadata_Control_Name").is_null()
-                    | (pl.col("Metadata_Control_Name").str.strip_chars() == "")
-                )
-                .then(None)
-                .otherwise(pl.col("Metadata_Control_Name"))
-                .alias("Metadata_Control_Name"),
-                pl.col("Metadata_Compound_Sources")
-                .list.join("|")
-                .alias("Metadata_Compound_Sources"),
-            ]
-        )
-        .collect(),
+compound_master_frame = cast(
+    pl.DataFrame,
+    compound_master.select(COMPOUND_MASTER_COLUMNS)
+    .with_columns(
+        [
+            pl.when(
+                pl.col("Metadata_Control_Name").is_null()
+                | (pl.col("Metadata_Control_Name").str.strip_chars() == "")
+            )
+            .then(None)
+            .otherwise(pl.col("Metadata_Control_Name"))
+            .alias("Metadata_Control_Name"),
+            pl.col("Metadata_Compound_Sources")
+            .list.join("|")
+            .alias("Metadata_Compound_Sources"),
+        ]
     )
+    .collect(),
 )
 compound_master_frame.write_csv(
     compound_master_path,
@@ -280,43 +275,39 @@ print(
 )
 profiles.sink_parquet(well_profiles_path.as_posix(), compression="zstd")
 
-validation = (
-    cast(
-        pl.DataFrame,
-        pl.scan_parquet(well_profiles_path)
-        .select(
-            [
-                pl.len().alias("n_rows"),
-                pl.struct(IDENTIFIER_COLUMNS[:-1]).n_unique().alias("unique_well_keys"),
-                pl.col("Metadata_JCP2022").null_count().alias("null_jcp2022"),
-                (~pl.col("Metadata_Is_Compound")).sum().alias("noncompound_rows"),
-                pl.col("Metadata_pert_type")
-                .is_not_null()
-                .sum()
-                .alias("pert_type_populated_rows"),
-                (pl.col("Metadata_pert_type") == TREATMENT_PERT_TYPE)
-                .sum()
-                .alias("treatment_rows"),
-            ]
-        )
-        .collect(),
+validation = cast(
+    pl.DataFrame,
+    pl.scan_parquet(well_profiles_path)
+    .select(
+        [
+            pl.len().alias("n_rows"),
+            pl.struct(IDENTIFIER_COLUMNS[:-1]).n_unique().alias("unique_well_keys"),
+            pl.col("Metadata_JCP2022").null_count().alias("null_jcp2022"),
+            (~pl.col("Metadata_Is_Compound")).sum().alias("noncompound_rows"),
+            pl.col("Metadata_pert_type")
+            .is_not_null()
+            .sum()
+            .alias("pert_type_populated_rows"),
+            (pl.col("Metadata_pert_type") == TREATMENT_PERT_TYPE)
+            .sum()
+            .alias("treatment_rows"),
+        ]
     )
+    .collect(),
 )
 print(f"[process_profiles] well profile validation\n{validation}", flush=True)
 
-compound_validation = (
-    cast(
-        pl.DataFrame,
-        pl.scan_csv(compound_master_path, separator="\t")
-        .select(
-            [
-                pl.len().alias("n_rows"),
-                pl.col("Metadata_JCP2022").n_unique().alias("n_unique_jcp2022"),
-                pl.col("Metadata_InChIKey").null_count().alias("null_inchikey"),
-            ]
-        )
-        .collect(),
+compound_validation = cast(
+    pl.DataFrame,
+    pl.scan_csv(compound_master_path, separator="\t")
+    .select(
+        [
+            pl.len().alias("n_rows"),
+            pl.col("Metadata_JCP2022").n_unique().alias("n_unique_jcp2022"),
+            pl.col("Metadata_InChIKey").null_count().alias("null_inchikey"),
+        ]
     )
+    .collect(),
 )
 print(
     f"[process_profiles] compound master validation\n{compound_validation}", flush=True

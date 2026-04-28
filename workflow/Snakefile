@@ -3,23 +3,100 @@ from functools import lru_cache
 
 configfile: "config/pipeline.yaml"
 
-RAW_DIR = config["paths"]["raw_dir"].rstrip("/")
-PROC_DIR = config["paths"]["proc_dir"].rstrip("/")
-METADATA_DIR = config["paths"]["metadata_dir"].rstrip("/")
-REFERENCE_DIR = f"{METADATA_DIR}/reference"
-PROFILE_MODEL = config["dataset"]["profile_model"].rstrip("/")
+
+def normalize_path(value):
+    return str(value).rstrip("/")
+
+
+def normalize_model_list(values):
+    if values is None:
+        return []
+    if isinstance(values, str):
+        values = [item.strip() for item in values.split(",")]
+
+    normalized = []
+    seen = set()
+    for value in values:
+        model_id = str(value).strip()
+        if not model_id or model_id in seen:
+            continue
+        normalized.append(model_id)
+        seen.add(model_id)
+    return normalized
+
+
+paths_cfg = dict(config["paths"])
+dataset_cfg = dict(config["dataset"])
+sources_cfg = dict(config["sources"])
+selection_cfg = dict(config["selection"])
+download_cfg = dict(config["download"])
+models_cfg = config.get("models", [])
+
+paths_cfg["raw_dir"] = config.get("raw_dir", paths_cfg["raw_dir"])
+paths_cfg["proc_dir"] = config.get("proc_dir", paths_cfg["proc_dir"])
+paths_cfg["results_dir"] = config.get(
+    "results_dir", paths_cfg.get("results_dir", "data/results")
+)
+
+RAW_DIR = normalize_path(paths_cfg["raw_dir"])
+PROC_DIR = normalize_path(paths_cfg["proc_dir"])
+RESULTS_DIR = normalize_path(paths_cfg["results_dir"])
+RAW_METADATA_DIR = f"{RAW_DIR}/metadata"
+PROC_METADATA_DIR = f"{PROC_DIR}/metadata"
+REFERENCE_DIR = f"{RAW_METADATA_DIR}/reference"
+DATASET_ID = dataset_cfg.get("id", "cpg0016_emb")
+DATASET_VERSION = dataset_cfg.get("version", "v2.0.0")
+
 MODEL_OUTPUT_STEMS = {
     "cpcnn_zenodo_7114558": "cpcnn",
     "efficientnet_v2_imagenet21k_s_feature_vector_2_0260bc96": "efficientnet",
+    "cellprofiler": "cellprofiler",
+    "cpdistiller_mesmer_s41467_025_62193_z": "cpdistiller",
 }
-MODEL_STEM = MODEL_OUTPUT_STEMS.get(PROFILE_MODEL, PROFILE_MODEL.replace("/", "_"))
+MODEL_ASSAY_NAMES = {
+    "cpcnn_zenodo_7114558": "cpcnn",
+    "efficientnet_v2_imagenet21k_s_feature_vector_2_0260bc96": "efficientnet",
+    "cellprofiler": "cellprofiler",
+    "cpdistiller_mesmer_s41467_025_62193_z": "cpdistiller",
+}
+IMPLEMENTED_MODELS = {
+    "cpcnn_zenodo_7114558",
+    "efficientnet_v2_imagenet21k_s_feature_vector_2_0260bc96",
+}
 
-MANIFEST_TSV = f"{METADATA_DIR}/{MODEL_STEM}_profile_manifest.tsv"
-SUMMARY_TSV = f"{METADATA_DIR}/{MODEL_STEM}_profile_manifest_summary.tsv"
-COMPOUND_MASTER = f"{METADATA_DIR}/compound_master.tsv"
-COMPOUND_METADATA = f"{METADATA_DIR}/compound_metadata.tsv"
-WELL_PROFILES = f"{PROC_DIR}/cpg0016_{MODEL_STEM}_well_profiles.parquet"
-MAE_RDS = f"{PROC_DIR}/cpg0016_{MODEL_STEM}_mae.rds"
+
+def model_stem(model_id):
+    return MODEL_OUTPUT_STEMS.get(model_id, model_id.replace("/", "_"))
+
+
+def model_id_from_stem(stem):
+    for model_id, output_stem in MODEL_OUTPUT_STEMS.items():
+        if output_stem == stem:
+            return model_id
+    raise ValueError(f"Unknown model stem: {stem}")
+
+
+def selected_model_ids():
+    models = normalize_model_list(models_cfg)
+    if not models:
+        raise ValueError("No CPG0016 models selected")
+
+    invalid = [model_id for model_id in models if model_id not in MODEL_ASSAY_NAMES]
+    if invalid:
+        raise ValueError("Unknown CPG0016 models: " + ", ".join(invalid))
+
+    unsupported = [model_id for model_id in models if model_id not in IMPLEMENTED_MODELS]
+    if unsupported:
+        raise ValueError(
+            "Selected CPG0016 models are not implemented yet: " + ", ".join(unsupported)
+        )
+
+    return models
+
+
+SELECTED_MODELS = selected_model_ids()
+SELECTED_MODEL_STEMS = [model_stem(model_id) for model_id in SELECTED_MODELS]
+MODEL_STEM_PATTERN = "|".join(SELECTED_MODEL_STEMS)
 
 REFERENCE_METADATA = {
     "well_metadata": f"{REFERENCE_DIR}/well.csv.gz",
@@ -29,13 +106,44 @@ REFERENCE_METADATA = {
     "compound_source_metadata": f"{REFERENCE_DIR}/compound_source.csv.gz",
 }
 
+COMPOUND_METADATA = f"{PROC_METADATA_DIR}/drug_metadata_raw.tsv"
+ANNOTATIONDB_CACHE = f"{RAW_METADATA_DIR}/all_adb_compounds.csv"
+ANNOTATIONDB_URL = f"{config['annotationdb_api'].rstrip('/')}/compound/all"
+ANNOTATIONDB_OVERWRITE = bool(download_cfg.get("overwrite", False))
+MAE_RDS = f"{RESULTS_DIR}/{DATASET_ID}_MultiAssayExperiment.rds"
+TABLE_DIR = f"{RESULTS_DIR}/{DATASET_ID}_tables"
+TABLE_ARCHIVE = f"{RESULTS_DIR}/{DATASET_ID}_tables.tar.gz"
+
+
+wildcard_constraints:
+    model_stem=MODEL_STEM_PATTERN
+
+
+def manifest_tsv_for_model_stem(stem):
+    return f"{PROC_METADATA_DIR}/{stem}_profile_manifest.tsv"
+
+
+def manifest_summary_for_model_stem(stem):
+    return f"{PROC_METADATA_DIR}/{stem}_profile_manifest_summary.tsv"
+
+
+def compound_master_for_model_stem(stem):
+    return f"{PROC_METADATA_DIR}/{stem}_compound_master.tsv"
+
+
+def well_profiles_for_model_stem(stem):
+    return f"{PROC_DIR}/assays/cpg0016_{stem}_well_profiles.parquet"
+
 
 checkpoint build_profile_manifest:
     input:
         plate_metadata=REFERENCE_METADATA["plate_metadata"],
     output:
-        manifest_tsv=MANIFEST_TSV,
-        summary_tsv=SUMMARY_TSV,
+        manifest_tsv=f"{PROC_METADATA_DIR}/{{model_stem}}_profile_manifest.tsv",
+        summary_tsv=f"{PROC_METADATA_DIR}/{{model_stem}}_profile_manifest_summary.tsv",
+    params:
+        profile_model=lambda wildcards: model_id_from_stem(wildcards.model_stem),
+        model_stem=lambda wildcards: wildcards.model_stem,
     script:
         "scripts/build_manifest.py"
 
@@ -47,31 +155,47 @@ rule download_reference_metadata:
         "scripts/download_metadata.py"
 
 
-@lru_cache(maxsize=1)
-def manifest_rows():
-    manifest_path = checkpoints.build_profile_manifest.get().output.manifest_tsv
+rule fetch_annotationdb_compounds:
+    output:
+        cache_csv=ANNOTATIONDB_CACHE,
+    params:
+        source_uri=ANNOTATIONDB_URL,
+        overwrite=lambda _wildcards: ANNOTATIONDB_OVERWRITE,
+    script:
+        "scripts/fetch_annotationdb_compounds.R"
+
+
+@lru_cache(maxsize=None)
+def manifest_rows_for_model_stem(stem):
+    manifest_path = checkpoints.build_profile_manifest.get(
+        model_stem=stem
+    ).output.manifest_tsv
 
     with open(manifest_path, newline="", encoding="utf-8") as handle:
         rows = list(DictReader(handle, delimiter="\t"))
 
     if not rows:
         raise ValueError(
-            "Profile manifest is empty. Adjust selection.sources or plate_limit_per_source."
+            "Profile manifest is empty. Adjust selection.sources or "
+            "plate_limit_per_source."
         )
 
     return rows
 
 
-@lru_cache(maxsize=1)
-def manifest_lookup():
+@lru_cache(maxsize=None)
+def manifest_lookup_for_model_stem(stem):
     lookup: dict[str, dict[str, str]] = {}
-    for row in manifest_rows():
+    for row in manifest_rows_for_model_stem(stem):
         lookup[row["local_relpath"]] = row
     return lookup
 
 
-def raw_profile_targets(_wildcards):
-    return [f"{RAW_DIR}/{row['local_relpath']}" for row in manifest_rows()]
+def raw_profile_targets(wildcards):
+    return [
+        f"{RAW_DIR}/{row['local_relpath']}"
+        for row in manifest_rows_for_model_stem(wildcards.model_stem)
+    ]
 
 
 def s3_uri_for_target(wildcards):
@@ -79,39 +203,63 @@ def s3_uri_for_target(wildcards):
 
 
 def expected_size_for_target(wildcards):
-    row = manifest_lookup()[wildcards.local_relpath]
-    return int(row["size_bytes"])
+    for stem in SELECTED_MODEL_STEMS:
+        row = manifest_lookup_for_model_stem(stem).get(wildcards.local_relpath)
+        if row is not None:
+            return int(row["size_bytes"])
+    raise ValueError(
+        "Raw profile target is absent from selected manifests: "
+        f"{wildcards.local_relpath}"
+    )
+
+
+def selected_manifest_paths(_wildcards):
+    return [
+        checkpoints.build_profile_manifest.get(model_stem=stem).output.manifest_tsv
+        for stem in SELECTED_MODEL_STEMS
+    ]
 
 
 rule download_profile:
     input:
-        manifest_tsv=lambda _wildcards: checkpoints.build_profile_manifest.get().output.manifest_tsv,
+        manifest_tsvs=selected_manifest_paths,
     output:
         f"{RAW_DIR}/{{local_relpath}}",
     params:
         s3_uri=s3_uri_for_target,
         expected_size=expected_size_for_target,
-        overwrite=lambda wildcards: bool(config["download"].get("overwrite", False)),
+        overwrite=lambda _wildcards: bool(download_cfg.get("overwrite", False)),
     script:
         "scripts/download_profile.py"
 
 
 rule build_processed_tables:
     input:
-        manifest_tsv=lambda _wildcards: checkpoints.build_profile_manifest.get().output.manifest_tsv,
-        summary_tsv=lambda _wildcards: checkpoints.build_profile_manifest.get().output.summary_tsv,
+        manifest_tsv=lambda wildcards: checkpoints.build_profile_manifest.get(
+            model_stem=wildcards.model_stem
+        ).output.manifest_tsv,
+        summary_tsv=lambda wildcards: checkpoints.build_profile_manifest.get(
+            model_stem=wildcards.model_stem
+        ).output.summary_tsv,
         raw_profiles=raw_profile_targets,
         **REFERENCE_METADATA,
     output:
-        well_profiles=WELL_PROFILES,
-        compound_master=COMPOUND_MASTER,
+        well_profiles=f"{PROC_DIR}/assays/cpg0016_{{model_stem}}_well_profiles.parquet",
+        compound_master=f"{PROC_METADATA_DIR}/{{model_stem}}_compound_master.tsv",
+    params:
+        profile_model=lambda wildcards: model_id_from_stem(wildcards.model_stem),
+        model_stem=lambda wildcards: wildcards.model_stem,
     script:
         "scripts/process_profiles.py"
 
 
 rule build_compound_metadata:
     input:
-        compound_master=COMPOUND_MASTER,
+        compound_masters=expand(
+            f"{PROC_METADATA_DIR}/{{model_stem}}_compound_master.tsv",
+            model_stem=SELECTED_MODEL_STEMS,
+        ),
+        annotationdb_cache=ANNOTATIONDB_CACHE,
     output:
         compound_metadata=COMPOUND_METADATA,
     script:
@@ -120,45 +268,58 @@ rule build_compound_metadata:
 
 rule build_multiassayexperiment:
     input:
-        well_profiles=WELL_PROFILES,
+        well_profiles=expand(
+            f"{PROC_DIR}/assays/cpg0016_{{model_stem}}_well_profiles.parquet",
+            model_stem=SELECTED_MODEL_STEMS,
+        ),
         compound_metadata=COMPOUND_METADATA,
-        manifest_tsv=lambda _wildcards: checkpoints.build_profile_manifest.get().output.manifest_tsv,
-        summary_tsv=lambda _wildcards: checkpoints.build_profile_manifest.get().output.summary_tsv,
-        raw_profiles=raw_profile_targets,
         configfile="config/pipeline.yaml",
     output:
         mae_rds=MAE_RDS,
     params:
-        profile_model=PROFILE_MODEL,
-        model_stem=MODEL_STEM,
+        dataset_id=DATASET_ID,
+        dataset_version=DATASET_VERSION,
+        profile_models=",".join(SELECTED_MODELS),
+        assay_names=",".join(
+            [MODEL_ASSAY_NAMES[model_id] for model_id in SELECTED_MODELS]
+        ),
     script:
         "scripts/build_mae.R"
 
 
-rule download:
+rule export_mae_tables:
     input:
-        manifest_tsv=lambda _wildcards: checkpoints.build_profile_manifest.get().output.manifest_tsv,
-        summary_tsv=lambda _wildcards: checkpoints.build_profile_manifest.get().output.summary_tsv,
-        raw_profiles=raw_profile_targets,
-        reference_metadata=list(REFERENCE_METADATA.values()),
+        mae_rds=MAE_RDS,
+        configfile="config/pipeline.yaml",
+    output:
+        outdir=directory(TABLE_DIR),
+    script:
+        "scripts/export_mae_tables.R"
+
+
+rule archive_mae_tables:
+    input:
+        outdir=TABLE_DIR,
+    output:
+        archive=TABLE_ARCHIVE,
+    shell:
+        """
+        set -euo pipefail
+        mkdir -p "$(dirname "{output.archive}")"
+        COPYFILE_DISABLE=1 tar -C "{RESULTS_DIR}" -cf - "$(basename "{input.outdir}")" | gzip -9 > "{output.archive}"
+        """
 
 
 rule process:
     input:
         MAE_RDS,
-        COMPOUND_MASTER,
         COMPOUND_METADATA,
+        expand(
+            f"{PROC_DIR}/assays/cpg0016_{{model_stem}}_well_profiles.parquet",
+            model_stem=SELECTED_MODEL_STEMS,
+        ),
 
 
 rule mae:
     input:
         MAE_RDS,
-
-
-rule all:
-    default_target: True
-    input:
-        MAE_RDS,
-        COMPOUND_MASTER,
-        COMPOUND_METADATA,
-        SUMMARY_TSV,

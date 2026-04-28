@@ -3,11 +3,10 @@ authors = ["Michael Tran <michaelcao-anh.tran@uhn.ca>"]
 channels = ["conda-forge", "bioconda"]
 name = "cpg0016-emb-pipeline"
 platforms = ["osx-arm64", "linux-64"]
-version = "0.1.0"
+version = "2.0.0"
 
 [tasks]
-download-metadata = "python workflow/scripts/download_metadata.py"
-render-qc = "Rscript -e \"rmarkdown::render('qc/cpg0016_mae_qc.Rmd', output_dir = 'qc')\""
+qc = "Rscript -e \"rmarkdown::render('qc/cpg0016_emb_qc.Rmd', output_dir = 'qc', knit_root_dir = getwd())\""
 
 [dependencies]
 ruff = ">=0.15.5,<0.16"
@@ -21,6 +20,8 @@ bioconductor-s4vectors = "*"
 pandoc = "*"
 r-dplyr = "*"
 r-ggplot2 = "*"
+r-httr2 = "*"
+r-jsonlite = "*"
 r-knitr = "*"
 r-rmarkdown = "*"
 r-scales = "*"

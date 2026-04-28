@@ -1,15 +1,8 @@
-import json
-import time
 from pathlib import Path
-from urllib.request import Request, urlopen
 
 import polars as pl
 
 
-DEFAULT_ANNOTATIONDB_URL = "https://v2annotationdb.bhklab.ca/compound/all"
-ANNOTATIONDB_TIMEOUT_SECONDS = 300.0
-ANNOTATIONDB_RETRIES = 5
-ANNOTATIONDB_BACKOFF_SECONDS = 5.0
 REQUIRED_COMPOUND_MASTER_COLUMNS = [
     "Metadata_JCP2022",
     "Metadata_InChIKey",
@@ -25,7 +18,6 @@ OUTPUT_COLUMNS = [
     "Metadata_InChIKey",
     "Metadata_pert_type",
     "Metadata_Control_Name",
-    "Metadata_Display_Name",
     "Metadata_InChI",
     "Metadata_SMILES",
     "Metadata_Compound_Source_Count",
@@ -47,37 +39,29 @@ def validate_columns(frame, required_columns, label):
         )
 
 
-def fetch_annotationdb_all(url):
-    request = Request(url, headers={"User-Agent": "cellpainting-annotationdb/1.0"})
+input_names = set(snakemake.input.keys())
+if "compound_masters" in input_names:
+    compound_master_inputs = snakemake.input["compound_masters"]
+else:
+    compound_master_inputs = [snakemake.input.compound_master]
+if isinstance(compound_master_inputs, str):
+    compound_master_inputs = [compound_master_inputs]
 
-    for attempt in range(1, ANNOTATIONDB_RETRIES + 1):
-        try:
-            with urlopen(request, timeout=ANNOTATIONDB_TIMEOUT_SECONDS) as response:
-                payload = json.load(response)
-            if not isinstance(payload, list):
-                raise ValueError(
-                    "AnnotationDB /compound/all did not return a JSON list"
-                )
-            return payload
-        except Exception:
-            if attempt == ANNOTATIONDB_RETRIES:
-                raise
-            sleep_seconds = ANNOTATIONDB_BACKOFF_SECONDS * attempt
-            print(
-                "[build_compound_metadata] "
-                f"annotationdb attempt={attempt} failed; retrying in {sleep_seconds:.1f}s",
-                flush=True,
-            )
-            time.sleep(sleep_seconds)
-
-
-compound_master_path = Path(snakemake.input.compound_master)
 output_path = Path(snakemake.output.compound_metadata)
+annotationdb_cache = Path(snakemake.input.annotationdb_cache)
 
-compound_master = pl.read_csv(
-    compound_master_path,
-    separator="\t",
-    null_values="NA",
+compound_master_frames = [
+    pl.read_csv(
+        Path(compound_master_path),
+        separator="\t",
+        null_values="NA",
+    )
+    for compound_master_path in compound_master_inputs
+]
+compound_master = (
+    pl.concat(compound_master_frames, how="vertical_relaxed")
+    .unique(subset=["Metadata_JCP2022"], keep="first")
+    .sort("Metadata_JCP2022")
 )
 validate_columns(
     compound_master, REQUIRED_COMPOUND_MASTER_COLUMNS, "compound_master.tsv"
@@ -107,18 +91,8 @@ if duplicate_jcp.height > 0:
         "cannot build a JCP-keyed compound metadata table"
     )
 
-annotationdb_url = snakemake.config.get("metadata", {}).get(
-    "annotationdb_url",
-    DEFAULT_ANNOTATIONDB_URL,
-)
-
-print(
-    f"[build_compound_metadata] reading AnnotationDB bulk compound index from {annotationdb_url}",
-    flush=True,
-)
-annotationdb_payload = fetch_annotationdb_all(annotationdb_url)
 annotationdb = (
-    pl.DataFrame(annotationdb_payload)
+    pl.read_csv(annotationdb_cache, null_values=["", "NA"])
     .rename(
         {
             "inchikey": "Metadata_InChIKey",
@@ -153,9 +127,6 @@ compound_metadata = (
     .with_columns(
         [
             normalized_control_name.alias("Metadata_Control_Name"),
-            pl.coalesce([normalized_control_name, pl.col("AnnotationDB_Name")]).alias(
-                "Metadata_Display_Name"
-            ),
             pl.col("AnnotationDB_CID").is_not_null().alias("In_AnnotationDB"),
         ]
     )
@@ -180,6 +151,7 @@ print(
     "[build_compound_metadata] "
     f"compound_rows={match_counts['compound_rows']} "
     f"annotationdb_matches={match_counts['annotationdb_matches']} "
+    f"annotationdb_cache={annotationdb_cache} "
     f"output={output_path}",
     flush=True,
 )
