@@ -28,6 +28,7 @@ r-scales = "*"
 r-tibble = "*"
 r-yaml = "*"
 ty = ">=0.0.24,<0.0.25"
+r-readr = ">=2.2.0,<3"
 
 [pypi-dependencies]
 snakemake = ">=9.17.1, <10"

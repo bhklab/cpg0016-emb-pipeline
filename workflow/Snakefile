@@ -109,7 +109,6 @@ REFERENCE_METADATA = {
 COMPOUND_METADATA = f"{PROC_METADATA_DIR}/drug_metadata_raw.tsv"
 ANNOTATIONDB_CACHE = f"{RAW_METADATA_DIR}/all_adb_compounds.csv"
 ANNOTATIONDB_URL = f"{config['annotationdb_api'].rstrip('/')}/compound/all"
-ANNOTATIONDB_OVERWRITE = bool(download_cfg.get("overwrite", False))
 MAE_RDS = f"{RESULTS_DIR}/{DATASET_ID}_MultiAssayExperiment.rds"
 TABLE_DIR = f"{RESULTS_DIR}/{DATASET_ID}_tables"
 TABLE_ARCHIVE = f"{RESULTS_DIR}/{DATASET_ID}_tables.tar.gz"
@@ -160,7 +159,6 @@ rule fetch_annotationdb_compounds:
         cache_csv=ANNOTATIONDB_CACHE,
     params:
         source_uri=ANNOTATIONDB_URL,
-        overwrite=lambda _wildcards: ANNOTATIONDB_OVERWRITE,
     script:
         "scripts/fetch_annotationdb_compounds.R"
 
