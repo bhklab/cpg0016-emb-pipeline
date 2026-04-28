@@ -22,11 +22,13 @@ sources:
 annotationdb_api: https://v2annotationdb.bhklab.ca
 
 # Profile model identifiers to process
-# cellprofiler and cpdistiller are model families but are not implemented yet
+# cpcnn and cellprofiler are enabled by default
+# efficientnet is available but disabled while dense assay memory handling is deferred
+# cpdistiller is source-limited and not enabled by default
 models:
   - cpcnn_zenodo_7114558
-  - efficientnet_v2_imagenet21k_s_feature_vector_2_0260bc96
-  # - cellprofiler
+  # - efficientnet_v2_imagenet21k_s_feature_vector_2_0260bc96
+  - cellprofiler
   # - cpdistiller_mesmer_s41467_025_62193_z
 
 selection:

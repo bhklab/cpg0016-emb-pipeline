@@ -62,6 +62,7 @@ MODEL_ASSAY_NAMES = {
 IMPLEMENTED_MODELS = {
     "cpcnn_zenodo_7114558",
     "efficientnet_v2_imagenet21k_s_feature_vector_2_0260bc96",
+    "cellprofiler",
 }
 
 
@@ -315,9 +316,10 @@ rule process:
         expand(
             f"{PROC_DIR}/assays/cpg0016_{{model_stem}}_well_profiles.parquet",
             model_stem=SELECTED_MODEL_STEMS,
-        ),
+        )
 
 
 rule mae:
     input:
         MAE_RDS,
+        TABLE_ARCHIVE,

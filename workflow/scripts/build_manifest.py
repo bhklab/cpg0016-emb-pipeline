@@ -6,6 +6,13 @@ from pathlib import Path
 import polars as pl
 
 
+PROFILE_MODEL_CELLPROFILER = "cellprofiler"
+CELLPROFILER_ASSEMBLED_KEY = (
+    "cpg0016-jump-assembled/source_all/workspace/profiles_assembled/"
+    "COMPOUND/v1.0/profiles_var_mad_int_featselect_harmony.parquet"
+)
+
+
 def parse_bool(value):
     if isinstance(value, bool):
         return value
@@ -32,6 +39,30 @@ def parse_selection_list(values):
         seen.add(item)
 
     return normalized
+
+
+def head_object(bucket, key, no_sign_request):
+    cmd = [
+        "aws",
+        "s3api",
+        "head-object",
+        "--bucket",
+        bucket,
+        "--key",
+        key,
+        "--output",
+        "json",
+    ]
+    if no_sign_request:
+        cmd.append("--no-sign-request")
+
+    response = subprocess.run(
+        cmd,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return json.loads(response.stdout)
 
 
 def record_skip(skip_counts, skip_examples, reason, key):
@@ -296,7 +327,7 @@ selection_mode = selection_cfg.get("mode", "source_subset")
 
 if selection_mode != "source_subset":
     raise ValueError(
-        "selection.mode must be 'source_subset' in this v1 deep-learning profile pipeline"
+        "selection.mode must be 'source_subset' for this CPG0016 profile pipeline"
     )
 
 sources = selection_cfg.get("sources") or []
@@ -335,33 +366,58 @@ print(
 )
 
 all_rows = []
-for source in sources:
-    source_rows = manifest_rows_for_source(
+if profile_model == PROFILE_MODEL_CELLPROFILER:
+    object_metadata = head_object(
         bucket=bucket,
-        dataset_prefix=dataset_prefix,
-        source=source,
-        profile_model=profile_model,
+        key=CELLPROFILER_ASSEMBLED_KEY,
         no_sign_request=True,
-        plate_type_lookup=plate_type_lookup,
-        include_plate_types=include_plate_types,
-        exclude_plate_types=exclude_plate_types,
     )
-    if plate_limit is not None:
-        source_rows = source_rows[:plate_limit]
-
-    if not source_rows:
-        raise ValueError(
-            f"No profile parquet files found for source '{source}' "
-            f"and model '{profile_model}'"
-        )
-
-    source_bytes = sum(row["size_bytes"] for row in source_rows)
+    all_rows.append(
+        {
+            "Metadata_Source": "source_all",
+            "Metadata_Batch": "assembled",
+            "Metadata_Plate": "COMPOUND",
+            "Metadata_PlateType": "COMPOUND",
+            "profile_model": profile_model,
+            "s3_key": CELLPROFILER_ASSEMBLED_KEY,
+            "size_bytes": int(object_metadata["ContentLength"]),
+            "local_relpath": f"{bucket}/{CELLPROFILER_ASSEMBLED_KEY}",
+        }
+    )
     print(
-        f"[build_manifest] source={source} files={len(source_rows)} "
-        f"size_bytes={source_bytes}",
+        "[build_manifest] "
+        f"profile_model={profile_model} "
+        f"assembled_profile=s3://{bucket}/{CELLPROFILER_ASSEMBLED_KEY}",
         flush=True,
     )
-    all_rows.extend(source_rows)
+else:
+    for source in sources:
+        source_rows = manifest_rows_for_source(
+            bucket=bucket,
+            dataset_prefix=dataset_prefix,
+            source=source,
+            profile_model=profile_model,
+            no_sign_request=True,
+            plate_type_lookup=plate_type_lookup,
+            include_plate_types=include_plate_types,
+            exclude_plate_types=exclude_plate_types,
+        )
+        if plate_limit is not None:
+            source_rows = source_rows[:plate_limit]
+
+        if not source_rows:
+            raise ValueError(
+                f"No profile parquet files found for source '{source}' "
+                f"and model '{profile_model}'"
+            )
+
+        source_bytes = sum(row["size_bytes"] for row in source_rows)
+        print(
+            f"[build_manifest] source={source} files={len(source_rows)} "
+            f"size_bytes={source_bytes}",
+            flush=True,
+        )
+        all_rows.extend(source_rows)
 
 if not all_rows:
     raise ValueError("No profile parquet files matched the configured subset")

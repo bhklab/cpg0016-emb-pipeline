@@ -17,8 +17,10 @@
 ## Model Decisions
 
 - `models` in `config/pipeline.yaml` is a plain list of selected model identifiers.
-- `cpcnn_zenodo_7114558` and `efficientnet_v2_imagenet21k_s_feature_vector_2_0260bc96` are implemented now.
-- `cellprofiler` and `cpdistiller_mesmer_s41467_025_62193_z` are documented as future model families. CellProfiler needs separate scalar morphology handling, and CPDistiller currently has source-limited coverage.
+- `cpcnn_zenodo_7114558` and `cellprofiler` are enabled by default.
+- CellProfiler uses the assembled COMPOUND `profiles_var_mad_int_featselect_harmony.parquet` table from `cpg0016-jump-assembled`, then applies the configured source, plate type, and plate limit filters during processing.
+- `efficientnet_v2_imagenet21k_s_feature_vector_2_0260bc96` remains registered but disabled by default because the dense MAE assay is substantially larger than CPCNN.
+- `cpdistiller_mesmer_s41467_025_62193_z` remains registered but disabled by default because observed coverage is source-limited.
 - Each selected model becomes a separate MAE assay with a stable Snakefile-defined assay name.
 
 ## Metadata Decisions

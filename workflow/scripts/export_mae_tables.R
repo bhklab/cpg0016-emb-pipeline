@@ -41,7 +41,13 @@ write_tsv <- function(frame, path) {
 }
 
 as_plain_df <- function(value) {
-  as.data.frame(value, stringsAsFactors = FALSE, check.names = FALSE)
+  frame <- as.data.frame(value)
+  value_names <- names(value)
+  if (length(value_names) == ncol(frame)) {
+    names(frame) <- value_names
+  }
+  row.names(frame) <- NULL
+  frame
 }
 
 manifest_entries <- list()

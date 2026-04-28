@@ -104,7 +104,7 @@ parquet_column_names <- function(path) {
 }
 
 read_parquet_columns <- function(path, columns) {
-  arrow::read_parquet(path, col_select = columns) |>
+  arrow::read_parquet(path, col_select = tidyselect::all_of(columns)) |>
     as.data.frame(stringsAsFactors = FALSE)
 }
 
@@ -364,6 +364,7 @@ col_data <- col_data[!duplicated(col_data$Sample.ID), , drop = FALSE]
 row.names(col_data) <- col_data$Sample.ID
 
 sample_map <- do.call(rbind, sample_map_frames)
+sample_map$assay <- factor(sample_map$assay, levels = names(experiments))
 
 mae <- MultiAssayExperiment::MultiAssayExperiment(
   experiments = MultiAssayExperiment::ExperimentList(experiments),
