@@ -323,12 +323,6 @@ selection_cfg = cfg["selection"]
 bucket = dataset_cfg["bucket"]
 dataset_prefix = dataset_cfg["prefix"].rstrip("/")
 profile_model = snakemake.params["profile_model"].rstrip("/")
-selection_mode = selection_cfg.get("mode", "source_subset")
-
-if selection_mode != "source_subset":
-    raise ValueError(
-        "selection.mode must be 'source_subset' for this CPG0016 profile pipeline"
-    )
 
 sources = selection_cfg.get("sources") or []
 if not sources:

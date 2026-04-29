@@ -32,8 +32,6 @@ models:
   # - cpdistiller_mesmer_s41467_025_62193_z
 
 selection:
-  # Curated drug only subset
-  mode: source_subset
   # CPG source folders to include
   sources:
     - source_1
