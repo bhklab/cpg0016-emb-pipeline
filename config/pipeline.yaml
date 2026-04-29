@@ -52,6 +52,12 @@ selection:
   # Use all compound wells including treatment wells and controls
   output_row_filter: all_compound_wells
 
+curation:
+  control_metadata_overrides:
+    - Metadata_JCP2022: JCP2022_033954
+      Metadata_pert_type: poscon
+      Metadata_Control_Name: Ly-364947
+
 download:
   # Redownload files even when a nonempty local copy exists
   overwrite: true

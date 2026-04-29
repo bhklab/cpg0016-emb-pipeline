@@ -25,6 +25,11 @@ COMPOUND_MASTER_COLUMNS = [
     "Metadata_Compound_Sources",
     "Metadata_Is_Compound",
 ]
+CONTROL_METADATA_COLUMNS = [
+    "Metadata_JCP2022",
+    "Metadata_pert_type",
+    "Metadata_Control_Name",
+]
 WELL_PROFILE_COLUMNS = IDENTIFIER_COLUMNS + [
     "Metadata_InChIKey",
     "Metadata_PlateType",
@@ -86,6 +91,38 @@ def is_numeric_dtype(dtype):
     return dtype in NUMERIC_DTYPES
 
 
+def manual_control_metadata_overrides(config):
+    rows = config.get("curation", {}).get("control_metadata_overrides", [])
+    if rows is None:
+        rows = []
+    if not isinstance(rows, list):
+        raise TypeError("curation.control_metadata_overrides must be a list")
+
+    normalized_rows = []
+    for row_idx, row in enumerate(rows, start=1):
+        if not isinstance(row, dict):
+            raise TypeError(
+                "curation.control_metadata_overrides entries must be mappings; "
+                f"entry {row_idx} is {type(row).__name__}"
+            )
+
+        normalized_row = {}
+        for column in CONTROL_METADATA_COLUMNS:
+            value = row.get(column)
+            if value is None or str(value).strip() == "":
+                raise ValueError(
+                    "curation.control_metadata_overrides entry "
+                    f"{row_idx} is missing required column {column}"
+                )
+            normalized_row[column] = str(value).strip()
+        normalized_rows.append(normalized_row)
+
+    return pl.DataFrame(
+        normalized_rows,
+        schema={column: pl.Utf8 for column in CONTROL_METADATA_COLUMNS},
+    )
+
+
 well_metadata = (
     read_reference_csv(snakemake.input.well_metadata)
     .unique(subset=["Metadata_Source", "Metadata_Plate", "Metadata_Well"])
@@ -115,6 +152,14 @@ control_metadata = (
         .alias("Metadata_Control_Name")
     )
 )
+control_metadata_overrides = manual_control_metadata_overrides(snakemake.config)
+if not control_metadata_overrides.is_empty():
+    # Source-level plate controls can be missing from the upstream control table.
+    control_metadata = pl.concat(
+        [control_metadata, control_metadata_overrides],
+        how="vertical",
+    ).unique(subset=["Metadata_JCP2022"], keep="last")
+
 compound_source_metadata = (
     read_reference_csv(snakemake.input.compound_source_metadata)
     .unique(subset=["Metadata_JCP2022", "Metadata_Compound_Source"])

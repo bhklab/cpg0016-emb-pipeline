@@ -29,3 +29,4 @@
 - AnnotationDB enrichment is intentionally minimal: PubChem CID, AnnotationDB name, AnnotationDB SMILES, and a match flag.
 - The AnnotationDB `/compound/all` response is cached once at `data/rawdata/metadata/all_adb_compounds.csv` and downstream joins read the cache.
 - Derived display-name columns are omitted from public outputs; users can choose source or AnnotationDB names downstream.
+- `JCP2022_033954` is manually corrected to positive-control metadata in `config/pipeline.yaml`. The reference well metadata places it in repeated `source_9` fixed control wells, but `perturbation_control.csv` omits it, which otherwise causes `Ly-364947` to be mislabeled as a treatment.
