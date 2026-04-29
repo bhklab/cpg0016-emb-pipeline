@@ -223,6 +223,7 @@ build_assay_from_profile <- function(
 
   matrices <- list()
   row_data <- list()
+  scalar_feature_index <- 0L
 
   for (feature_column in feature_columns) {
     feature_frame <- read_parquet_columns(profile_path, feature_column)
@@ -249,12 +250,17 @@ build_assay_from_profile <- function(
       )
       rm(flat_values)
       row_names <- sprintf("%s_%04d", feature_column, seq_len(nrow(mat)))
+      feature_source <- feature_column
+      feature_index <- seq_len(nrow(mat))
     } else if (is.numeric(values) || is.integer(values) || is.logical(values)) {
       numeric_values <- as.numeric(values)
       rm(values, feature_frame)
       mat <- matrix(numeric_values, nrow = 1L)
       rm(numeric_values)
-      row_names <- feature_column
+      scalar_feature_index <- scalar_feature_index + 1L
+      row_names <- sprintf("%s_%04d", assay_name, scalar_feature_index)
+      feature_source <- assay_name
+      feature_index <- scalar_feature_index
     } else {
       rm(values, feature_frame)
       next
@@ -265,8 +271,8 @@ build_assay_from_profile <- function(
     matrices[[feature_column]] <- mat
     row_data[[feature_column]] <- data.frame(
       Feature.ID = row_names,
-      Feature.Source = feature_column,
-      Feature.Index = seq_along(row_names),
+      Feature.Source = feature_source,
+      Feature.Index = feature_index,
       Profile.Model = profile_model,
       Assay.Name = assay_name,
       stringsAsFactors = FALSE,
